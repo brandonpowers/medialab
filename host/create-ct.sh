@@ -5,7 +5,7 @@ set -euo pipefail
 CTID="${CTID:-101}"
 HOSTNAME="${HOSTNAME:-docker-host}"
 BRIDGE="${BRIDGE:-vmbr0}"
-TEMPLATE="${TEMPLATE:-local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst}"
+TEMPLATE="${TEMPLATE:-local:vztmpl/ubuntu-24.04-standard_24.04-2_amd64.tar.zst}"
 
 CORES="${CORES:-8}"
 MEMORY_MB="${MEMORY_MB:-24576}"
