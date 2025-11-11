@@ -1,0 +1,322 @@
+x-common-env: &common-env
+  PUID: ${PUID}
+  PGID: ${PGID}
+  TZ: ${TZ}
+
+x-common-vol: &common-vol
+  - ${MEDIA_ROOT}:/media
+
+# Logging configuration to prevent disk space issues
+x-logging: &default-logging
+  driver: "json-file"
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  # ============================================
+  # REMOTE ACCESS & NETWORKING
+  # ============================================
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    logging: *default-logging
+    # Alternative: mount config file
+    # volumes:
+    #   - ./data/cloudflared:/etc/cloudflared
+
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: tailscale
+    restart: unless-stopped
+    hostname: homelab-media
+    environment:
+      TS_AUTHKEY: ${TAILSCALE_AUTH_KEY}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_USERSPACE: "false"
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    volumes:
+      - ./data/tailscale:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    network_mode: host
+    logging: *default-logging
+
+  # ============================================
+  # PUBLIC USER-FACING SERVICES
+  # (Accessible via Cloudflare Tunnel)
+  # ============================================
+
+  homarr:
+    image: ghcr.io/ajnart/homarr:latest
+    container_name: homarr
+    restart: unless-stopped
+    ports:
+      - "7575:7575"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/homarr/configs:/app/data/configs
+      - ./data/homarr/icons:/app/public/icons
+      - /var/run/docker.sock:/var/run/docker.sock
+    logging: *default-logging
+
+  jellyfin:
+    image: jellyfin/jellyfin:latest
+    container_name: jellyfin
+    restart: unless-stopped
+    ports:
+      - "8096:8096"
+      - "8920:8920"
+    environment:
+      <<: *common-env
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - ./data/jellyfin/config:/config
+      - ./data/jellyfin/cache:/cache
+      - ${MEDIA_ROOT}:/media:ro  # Read-only to prevent accidental deletion
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging: *default-logging
+
+  jellyseerr:
+    image: fallenbagel/jellyseerr:latest
+    container_name: jellyseerr
+    restart: unless-stopped
+    ports:
+      - "5055:5055"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/jellyseerr/config:/app/config
+    logging: *default-logging
+
+  audiobookshelf:
+    image: ghcr.io/advplyr/audiobookshelf:latest
+    container_name: audiobookshelf
+    restart: unless-stopped
+    ports:
+      - "13378:80"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/audiobookshelf/config:/config
+      - ./data/audiobookshelf/metadata:/metadata
+      - ${MEDIA_ROOT}/audiobooks:/audiobooks
+      - ${MEDIA_ROOT}/podcasts:/podcasts
+    logging: *default-logging
+
+  calibre-web:
+    image: lscr.io/linuxserver/calibre-web:latest
+    container_name: calibre-web
+    restart: unless-stopped
+    ports:
+      - "8083:8083"
+    environment:
+      <<: *common-env
+      DOCKER_MODS: linuxserver/mods:universal-calibre
+    volumes:
+      - ./data/calibre-web/config:/config
+      - ${MEDIA_ROOT}/books:/books
+    logging: *default-logging
+
+  # ============================================
+  # PRIVATE ADMIN SERVICES
+  # (Access via Tailscale only)
+  # ============================================
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    logging: *default-logging
+
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    restart: unless-stopped
+    ports:
+      - "8989:8989"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/sonarr/config:/config
+      - *common-vol
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8989/ping"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    restart: unless-stopped
+    ports:
+      - "7878:7878"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/radarr/config:/config
+      - *common-vol
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7878/ping"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  lidarr:
+    image: lscr.io/linuxserver/lidarr:latest
+    container_name: lidarr
+    restart: unless-stopped
+    ports:
+      - "8686:8686"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/lidarr/config:/config
+      - *common-vol
+    logging: *default-logging
+
+  readarr:
+    image: lscr.io/linuxserver/readarr:develop
+    container_name: readarr
+    restart: unless-stopped
+    ports:
+      - "8787:8787"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/readarr/config:/config
+      - *common-vol
+    logging: *default-logging
+
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    restart: unless-stopped
+    ports:
+      - "9696:9696"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/prowlarr/config:/config
+      - *common-vol
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9696/ping"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    logging: *default-logging
+
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    restart: unless-stopped
+    ports:
+      - "6767:6767"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/bazarr/config:/config
+      - *common-vol
+    logging: *default-logging
+
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr:latest
+    container_name: recyclarr
+    restart: unless-stopped
+    user: ${PUID}:${PGID}
+    environment:
+      TZ: ${TZ}
+    volumes:
+      - ./data/recyclarr/config:/config
+    logging: *default-logging
+
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+      - "6881:6881"
+      - "6881:6881/udp"
+    environment:
+      <<: *common-env
+      WEBUI_PORT: 8080
+    volumes:
+      - ./data/qbittorrent/config:/config
+      - ${MEDIA_ROOT}/downloads:/downloads
+      - *common-vol
+    logging: *default-logging
+
+  sabnzbd:
+    image: lscr.io/linuxserver/sabnzbd:latest
+    container_name: sabnzbd
+    restart: unless-stopped
+    ports:
+      - "8085:8080"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/sabnzbd/config:/config
+      - ${MEDIA_ROOT}/downloads:/downloads
+      - *common-vol
+    logging: *default-logging
+
+  tdarr:
+    image: ghcr.io/haveagitgat/tdarr:latest
+    container_name: tdarr
+    restart: unless-stopped
+    ports:
+      - "8265:8265"  # Web UI
+      - "8266:8266"  # Server port
+    environment:
+      <<: *common-env
+      serverIP: 0.0.0.0
+      serverPort: 8266
+      webUIPort: 8265
+      internalNode: "true"
+      nodeName: HomeLabNode
+    devices:
+      - /dev/dri:/dev/dri
+    volumes:
+      - ./data/tdarr/server:/app/server
+      - ./data/tdarr/configs:/app/configs
+      - ./data/tdarr/logs:/app/logs
+      - ${MEDIA_ROOT}:/media:ro  # Read-only to prevent accidental deletion
+      - /tmp/tdarr:/temp
+    logging: *default-logging
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - uptime_kuma_data:/app/data
+    logging: *default-logging
+
+volumes:
+  portainer_data:
+  uptime_kuma_data:

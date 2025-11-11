@@ -1,0 +1,6 @@
+# keep secrets & local data out of git
+.env
+data/
+# docker leftovers
+**/.DS_Store
+**/*.log

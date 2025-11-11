@@ -1,0 +1,103 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# -------- Config (override via env) --------
+CTID="${CTID:-101}"
+HOSTNAME="${HOSTNAME:-docker-host}"
+BRIDGE="${BRIDGE:-vmbr0}"
+TEMPLATE="${TEMPLATE:-local:vztmpl/ubuntu-24.04-standard_24.04-1_amd64.tar.zst}"
+
+CORES="${CORES:-8}"
+MEMORY_MB="${MEMORY_MB:-24576}"
+SWAP_MB="${SWAP_MB:-1024}"
+DISK_SIZE="${DISK_SIZE:-100G}"
+
+HOST_MEDIA_PATH="${HOST_MEDIA_PATH:-/mnt/media}"
+
+# Optional: set a password non-interactively by exporting CT_PASSWORD
+CT_PASSWORD="${CT_PASSWORD:-}"
+
+# -------- Helpers --------
+already_has_line() { grep -qxF "$1" "$2"; }
+append_once() { local line="$1" file="$2"; already_has_line "$line" "$file" || echo "$line" >> "$file"; }
+ct_exists() { pct status "$CTID" &>/dev/null; }
+ct_running() { [[ "$(pct status "$CTID" 2>/dev/null || true)" == *"status: running"* ]]; }
+
+changed=false
+
+# -------- Ensure template exists --------
+if ! pveam list local | awk '{print $2}' | grep -q "$(basename "$TEMPLATE")" && [[ "$TEMPLATE" == local:* ]]; then
+  echo "[!] Template $(basename "$TEMPLATE") not found in local storage."
+  echo "    Download it in UI: local (pve) -> CT Templates -> Templates"
+  echo "    or via CLI: pveam update && pveam download local $(basename "$TEMPLATE")"
+  exit 1
+fi
+
+# -------- Create CT if needed --------
+if ! ct_exists; then
+  echo "[*] Creating CT $CTID ($HOSTNAME)"
+  if [[ -n "$CT_PASSWORD" ]]; then
+    pct create "$CTID" "$TEMPLATE" \
+      --hostname "$HOSTNAME" \
+      --password "$CT_PASSWORD" \
+      --unprivileged 1 \
+      --cores "$CORES" --memory "$MEMORY_MB" --swap "$SWAP_MB" \
+      --rootfs "local-lvm:20" \
+      --features nesting=1,keyctl=1,fuse=1 \
+      --net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" \
+      --cmode shell --ostype ubuntu
+  else
+    pct create "$CTID" "$TEMPLATE" \
+      --hostname "$HOSTNAME" \
+      --unprivileged 1 \
+      --cores "$CORES" --memory "$MEMORY_MB" --swap "$SWAP_MB" \
+      --rootfs "local-lvm:20" \
+      --features nesting=1,keyctl=1,fuse=1 \
+      --net0 "name=eth0,bridge=$BRIDGE,ip=dhcp" \
+      --cmode shell --ostype ubuntu \
+      --password
+  fi
+  changed=true
+else
+  echo "[*] CT $CTID already exists; ensuring settings."
+  pct set "$CTID" -cores "$CORES" || true
+  pct set "$CTID" -memory "$MEMORY_MB" -swap "$SWAP_MB" || true
+fi
+
+# -------- Resize disk --------
+if pct resize "$CTID" rootfs "$DISK_SIZE"; then
+  changed=true
+fi
+
+# -------- Ensure host media dir --------
+mkdir -p "$HOST_MEDIA_PATH"
+
+# -------- Update CT config (idempotent) --------
+CONF="/etc/pve/lxc/${CTID}.conf"
+touch "$CONF"
+
+append_once "mp0: ${HOST_MEDIA_PATH},mp=/mnt/media" "$CONF"
+append_once "lxc.cgroup2.devices.allow: c 226:* rwm" "$CONF"
+append_once "lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir" "$CONF"
+
+# -------- Host sysctl for inotify (applies to CT processes) --------
+if ! grep -q "fs.inotify.max_user_watches=1048576" /etc/sysctl.conf 2>/dev/null; then
+  echo "fs.inotify.max_user_watches=1048576" >> /etc/sysctl.conf
+  echo "fs.inotify.max_user_instances=1024"  >> /etc/sysctl.conf
+  sysctl --system || true
+fi
+
+# -------- Start/restart CT if needed --------
+if ct_running; then
+  if [[ "$changed" == true ]]; then
+    echo "[*] Restarting CT $CTID to apply changes"
+    pct restart "$CTID"
+  else
+    echo "[*] CT $CTID already running; no restart needed."
+  fi
+else
+  echo "[*] Starting CT $CTID"
+  pct start "$CTID"
+fi
+
+echo "[✓] Done. Enter CT with: pct enter $CTID"
