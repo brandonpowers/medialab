@@ -5,7 +5,7 @@ A complete, modern media server stack running in an Ubuntu 24.04 LXC on Proxmox.
 ## Overview
 
 This is a **privacy-first, production-ready media server** with:
-- ✅ **20 Docker services** - Complete automation stack
+- ✅ **25 Docker services** - Complete automation stack
 - ✅ **Privacy-first** - Cloudflare Tunnel (home IP hidden) + Tailscale (admin access)
 - ✅ **Rich media types** - Movies, TV, music, audiobooks, podcasts, e-books
 - ✅ **Dual downloads** - Usenet (fast) + Torrents (free)
@@ -35,7 +35,11 @@ This is a **privacy-first, production-ready media server** with:
 - [Architecture](#architecture)
 - [What's Next?](#whats-next)
 
-## Services Included (20 Total)
+## Services Included (25 Total)
+
+**DevOps & Version Control:**
+- **Gitea** - Self-hosted Git service with built-in CI/CD (see [GITEA_SETUP.md](GITEA_SETUP.md))
+- **Gitea Actions Runner** - Automated deployment on push to main
 
 **Remote Access & Privacy:**
 - **Cloudflare Tunnel** - Secure remote access (home IP hidden, no ports open)
@@ -44,6 +48,7 @@ This is a **privacy-first, production-ready media server** with:
 **Public User-Facing Services** (via Cloudflare Tunnel):
 - **Jellyfin** - Open-source media server (movies, TV, music) with GPU transcoding
 - **Jellyseerr** - Media request and discovery platform
+- **Immich** - Self-hosted photo and video backup (Google Photos alternative)
 - **Audiobookshelf** - Audiobook and podcast server with mobile apps
 - **Calibre-Web** - E-book library with send-to-Kindle support
 - **Homarr** - Unified dashboard for all services
@@ -65,6 +70,11 @@ This is a **privacy-first, production-ready media server** with:
 - **qBittorrent** - Torrent download client with modern WebUI
 - **SABnzbd** - Usenet download client (faster, more reliable than torrents)
 - **Tdarr** - Automated video transcoding (H.265 conversion, saves 30-50% storage)
+
+**Shared Backend Services:**
+- **PostgreSQL** - Shared database for Immich, Jellyseerr, Uptime Kuma
+- **Redis** - Shared cache for Immich job queues and caching
+- 📖 See [BACKEND_SUMMARY.md](BACKEND_SUMMARY.md) for quick reference or [BACKEND_MIGRATION.md](BACKEND_MIGRATION.md) for detailed guide
 
 ## Quick Start
 
@@ -97,6 +107,8 @@ cp .env.example .env
 # IMPORTANT: Edit .env with your values:
 # - DOMAIN=glaance.io
 # - EMAIL=your-email@example.com
+# - DB_PASSWORD=... (generate with: openssl rand -base64 32)
+# - REDIS_PASSWORD=... (generate with: openssl rand -base64 32)
 # - TMDB_API_KEY=... (get from https://www.themoviedb.org/settings/api)
 # - CLOUDFLARE_TUNNEL_TOKEN=... (see Cloudflare Tunnel Setup section)
 # - TAILSCALE_AUTH_KEY=... (see Tailscale Setup section)
@@ -225,6 +237,14 @@ Service:
   URL: calibre-web:8083
 ```
 
+**6. Immich (Photo Backup)**
+```
+Public hostname: photos.glaance.io
+Service:
+  Type: HTTP
+  URL: immich-server:3001
+```
+
 Click "Save tunnel" after adding all routes.
 
 #### Step 4: Configure Environment Variable
@@ -278,11 +298,13 @@ curl -I https://homarr.glaance.io
 curl -I https://jellyseerr.glaance.io
 curl -I https://audiobooks.glaance.io
 curl -I https://books.glaance.io
+curl -I https://photos.glaance.io
 ```
 
 Or just open in browser:
 - https://homarr.glaance.io - Should show your dashboard
 - https://jellyfin.glaance.io - Should show Jellyfin login
+- https://photos.glaance.io - Should show Immich login
 
 **Check SSL Certificate:**
 - Click padlock icon in browser
@@ -400,6 +422,7 @@ Accessible from anywhere with **home IP hidden**:
 - **Dashboard** → https://homarr.glaance.io
 - **Jellyfin** → https://jellyfin.glaance.io
 - **Jellyseerr** → https://jellyseerr.glaance.io
+- **Photos** → https://photos.glaance.io
 - **Audiobooks** → https://audiobooks.glaance.io
 - **E-books** → https://books.glaance.io
 
@@ -506,13 +529,14 @@ Ensure your `/mnt/media` directory has this structure:
 ├── music/
 ├── audiobooks/
 ├── podcasts/
-└── books/
+├── books/
+└── photos/
 ```
 
 Create directories if needed:
 ```bash
 mkdir -p /mnt/media/downloads/{complete/{torrents,usenet},incomplete/{torrents,usenet}}
-mkdir -p /mnt/media/{movies,tv,music,audiobooks,podcasts,books}
+mkdir -p /mnt/media/{movies,tv,music,audiobooks,podcasts,books,photos}
 ```
 
 ### 7. Recyclarr - Automated Quality Profiles
@@ -644,6 +668,59 @@ Monitor all your services and get alerts when they go down.
    - Set: Transcode to H.265, keep audio as-is
 5. Set schedule: Only transcode overnight (avoid during streaming hours)
 6. Monitor: Dashboard shows transcoding progress and space saved
+
+### 12. Immich - Photo & Video Backup
+
+**Access:** `https://photos.glaance.io` (or local IP:2283)
+
+**Initial Setup:**
+
+1. Open Immich for the first time
+2. Create admin account (email + password)
+3. Complete welcome wizard
+
+**Mobile App Setup:**
+
+1. **Download Immich mobile app:**
+   - iOS: https://apps.apple.com/app/immich/id1613945652
+   - Android: https://play.google.com/store/apps/details?id=app.alextran.immich
+
+2. **Connect to your server:**
+   - Server URL: `https://photos.glaance.io`
+   - Login with your admin credentials
+
+3. **Enable automatic backup:**
+   - Settings → Backup
+   - Enable "Automatic backup"
+   - Select albums/folders to backup
+   - Choose backup settings (original quality recommended)
+
+**Key Features:**
+
+- ✅ **Automatic photo/video backup** - Like Google Photos, but self-hosted
+- ✅ **Face recognition** - ML-powered people detection
+- ✅ **Smart search** - Search by objects, places, dates
+- ✅ **Album sharing** - Share albums with family/friends
+- ✅ **Mobile apps** - iOS and Android native apps
+- ✅ **Live photos** - Full support for iOS live photos
+- ✅ **RAW support** - Professional photography formats
+- ✅ **Video transcoding** - Automatic video optimization
+
+**Storage Location:**
+
+Photos are stored in: `/mnt/media/photos/`
+
+Create this directory if it doesn't exist:
+```bash
+mkdir -p /mnt/media/photos
+```
+
+**Tips:**
+
+- **Original quality:** Immich stores photos in original quality (no compression)
+- **Storage estimates:** ~2GB per 1000 photos (varies by resolution)
+- **Performance:** ML features use CPU; consider disabling on low-power systems
+- **Backup strategy:** Immich is your backup, but consider backing up the `/media/photos` directory too
 
 ---
 
@@ -1165,17 +1242,18 @@ docker compose exec jellyfin ping google.com
 │  │      Ubuntu 24.04 LXC Container (CT 101)           │  │
 │  │                                                     │  │
 │  │  ┌──────────────────────────────────────────────┐  │  │
-│  │  │        Docker Compose (20 Services)          │  │  │
+│  │  │        Docker Compose (23 Services)          │  │  │
 │  │  ├──────────────────────────────────────────────┤  │  │
 │  │  │  PUBLIC (via Cloudflare):                    │  │  │
 │  │  │    Jellyfin, Jellyseerr, Homarr              │  │  │
-│  │  │    Audiobookshelf, Calibre-Web               │  │  │
+│  │  │    Audiobookshelf, Calibre-Web, Immich       │  │  │
 │  │  ├──────────────────────────────────────────────┤  │  │
 │  │  │  PRIVATE (via Tailscale):                    │  │  │
 │  │  │    *arr apps, Downloads, Tdarr               │  │  │
 │  │  │    Portainer, Uptime Kuma                    │  │  │
 │  │  ├──────────────────────────────────────────────┤  │  │
-│  │  │  ACCESS: cloudflared + tailscale containers  │  │  │
+│  │  │  BACKEND: PostgreSQL, Redis                  │  │  │
+│  │  │  ACCESS: cloudflared + tailscale             │  │  │
 │  │  └──────────────────────────────────────────────┘  │  │
 │  │                                                     │  │
 │  │  Mounts: /dev/dri (GPU), /mnt/media (storage)      │  │
@@ -1210,7 +1288,7 @@ For optional enhancements and future ideas, see **[NEXTSTEPS.md](NEXTSTEPS.md)**
 
 ### Stack Overview
 
-**Service Count:** 20 services (5 public, 15 private)
+**Service Count:** 25 services (6 public, 19 private)
 **Total Cost:** $0/year (Cloudflare + Tailscale free) + optional $120-190/year (Usenet)
 **Storage:** ~100GB for services + media storage
 **Resources:** 8 CPU cores, 24GB RAM (configured in LXC)

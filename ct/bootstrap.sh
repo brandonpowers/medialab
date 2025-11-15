@@ -77,6 +77,7 @@ mkdir -p data/{audiobookshelf/{config,metadata},calibre-web/config}
 mkdir -p data/{sonarr/config,radarr/config,lidarr/config,readarr/config,prowlarr/config,bazarr/config}
 mkdir -p data/{recyclarr/config,qbittorrent/config,sabnzbd/config}
 mkdir -p data/{tdarr/{server,configs,logs}}
+mkdir -p data/{immich/model-cache}
 echo "[✓] Service directories created."
 
 # Ensure .env exists (create from example if missing)
@@ -89,6 +90,8 @@ if [ ! -f .env ]; then
     echo "║ IMPORTANT: Edit .env file with your actual credentials!   ║"
     echo "║                                                            ║"
     echo "║ Required before starting:                                 ║"
+    echo "║   - DB_PASSWORD (openssl rand -base64 32)                 ║"
+    echo "║   - REDIS_PASSWORD (openssl rand -base64 32)              ║"
     echo "║   - CLOUDFLARE_TUNNEL_TOKEN                               ║"
     echo "║   - TAILSCALE_AUTH_KEY                                    ║"
     echo "║   - TMDB_API_KEY                                          ║"
