@@ -78,6 +78,44 @@ This is a **privacy-first, production-ready media server** with:
 
 ## Quick Start
 
+### ⚡ Automated Setup (Recommended)
+
+**Deploy your entire homelab in 2 commands:**
+
+```bash
+# 1. Clone and enter directory
+git clone https://github.com/brandonpowers/homelab.git /opt/homelab
+cd /opt/homelab
+
+# 2. Run automated setup
+./scripts/setup-homelab.sh
+```
+
+**What the script does:**
+1. ✅ Checks prerequisites (Docker, Docker Compose, OpenSSL)
+2. ✅ Prompts for configuration (timezone, domain, email, etc.)
+3. ✅ Generates all passwords and security tokens automatically
+4. ✅ Creates `.env` configuration file
+5. ✅ Sets up all data directories
+6. ✅ Validates docker-compose.yml
+7. ✅ Pulls all Docker images
+8. ✅ Starts all 25 services
+9. ✅ Waits for postgres/redis to be healthy
+10. ✅ Verifies all databases created
+11. ✅ Shows service status and access URLs
+
+**After setup:**
+- `.env` created with all configuration
+- `.passwords.txt` created with auto-generated passwords (store securely, then delete!)
+- All services running and verified
+- Ready to configure Cloudflare Tunnel and Tailscale
+
+**Total time:** ~10-20 minutes (mostly downloading images)
+
+### Manual Setup
+
+If you prefer manual setup:
+
 ### 1) On the Proxmox host
 ```bash
 cd /root
