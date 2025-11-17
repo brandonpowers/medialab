@@ -113,21 +113,29 @@ HOMELAB_ROOT="$(dirname "$SCRIPT_DIR")"
 # Create /opt/homelab in container if it doesn't exist
 pct exec "$CTID" -- mkdir -p /opt/homelab
 
-# Copy all homelab files to container, excluding unnecessary files
-echo "[*] Syncing files from $HOMELAB_ROOT to CT:/opt/homelab"
-rsync -av --delete \
+# Use pct push to copy files (works for both privileged and unprivileged containers)
+echo "[*] Copying files from $HOMELAB_ROOT to CT:/opt/homelab"
+
+# Create a temporary tarball
+TEMP_TAR="/tmp/homelab-$CTID.tar.gz"
+tar -czf "$TEMP_TAR" \
   --exclude='.git' \
   --exclude='.env' \
-  --exclude='data/' \
+  --exclude='data' \
   --exclude='*.backup.*' \
   --exclude='.passwords.txt' \
-  "$HOMELAB_ROOT/" \
-  "/var/lib/lxc/$CTID/rootfs/opt/homelab/"
+  -C "$HOMELAB_ROOT" .
+
+# Push tarball to container and extract
+pct push "$CTID" "$TEMP_TAR" /tmp/homelab.tar.gz
+pct exec "$CTID" -- tar -xzf /tmp/homelab.tar.gz -C /opt/homelab
+pct exec "$CTID" -- rm /tmp/homelab.tar.gz
+rm "$TEMP_TAR"
 
 # Make scripts executable
 pct exec "$CTID" -- chmod +x /opt/homelab/ct/bootstrap.sh
 pct exec "$CTID" -- chmod +x /opt/homelab/ct/install-service.sh
-pct exec "$CTID" -- chmod +x /opt/homelab/scripts/*.sh
+pct exec "$CTID" -- chmod +x /opt/homelab/scripts/*.sh 2>/dev/null || true
 
 echo "[✓] Files copied to container"
 echo "[✓] Done. Enter CT with: pct enter $CTID"
