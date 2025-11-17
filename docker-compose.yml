@@ -209,19 +209,6 @@ services:
       - *common-vol
     logging: *default-logging
 
-  readarr:
-    image: lscr.io/linuxserver/readarr:develop
-    container_name: readarr
-    restart: unless-stopped
-    ports:
-      - "8787:8787"
-    environment:
-      <<: *common-env
-    volumes:
-      - ./data/readarr/config:/config
-      - *common-vol
-    logging: *default-logging
-
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr

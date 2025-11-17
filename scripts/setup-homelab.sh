@@ -205,7 +205,6 @@ TMDB_API_KEY=${TMDB_API_KEY}
 # Recyclarr API Keys (configure after services are running)
 SONARR_API_KEY=your_sonarr_api_key_here
 RADARR_API_KEY=your_radarr_api_key_here
-READARR_API_KEY=your_readarr_api_key_here
 EOF
 
     print_success ".env file created successfully"
@@ -247,7 +246,6 @@ create_directories() {
         "data/sonarr/config"
         "data/radarr/config"
         "data/lidarr/config"
-        "data/readarr/config"
         "data/prowlarr/config"
         "data/bazarr/config"
         "data/recyclarr/config"
