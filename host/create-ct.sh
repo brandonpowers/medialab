@@ -75,6 +75,13 @@ fi
 # -------- Ensure host media dir --------
 mkdir -p "$HOST_MEDIA_PATH"
 
+# Create all required media subdirectories
+mkdir -p "$HOST_MEDIA_PATH"/{movies,tv,music,audiobooks,books,downloads/{complete,incomplete},photos}
+
+# Set proper ownership (1000:1000 is typical for unprivileged containers)
+chown -R 1000:1000 "$HOST_MEDIA_PATH" 2>/dev/null || true
+chmod -R 775 "$HOST_MEDIA_PATH" 2>/dev/null || true
+
 # -------- Update CT config (idempotent) --------
 CONF="/etc/pve/lxc/${CTID}.conf"
 touch "$CONF"
