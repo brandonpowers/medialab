@@ -103,4 +103,37 @@ else
   pct start "$CTID"
 fi
 
+# -------- Copy homelab files into container --------
+echo "[*] Copying homelab files to container..."
+
+# Determine the script's parent directory (homelab root)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+HOMELAB_ROOT="$(dirname "$SCRIPT_DIR")"
+
+# Create /opt/homelab in container if it doesn't exist
+pct exec "$CTID" -- mkdir -p /opt/homelab
+
+# Copy all homelab files to container, excluding unnecessary files
+echo "[*] Syncing files from $HOMELAB_ROOT to CT:/opt/homelab"
+rsync -av --delete \
+  --exclude='.git' \
+  --exclude='.env' \
+  --exclude='data/' \
+  --exclude='*.backup.*' \
+  --exclude='.passwords.txt' \
+  "$HOMELAB_ROOT/" \
+  "/var/lib/lxc/$CTID/rootfs/opt/homelab/"
+
+# Make scripts executable
+pct exec "$CTID" -- chmod +x /opt/homelab/ct/bootstrap.sh
+pct exec "$CTID" -- chmod +x /opt/homelab/ct/install-service.sh
+pct exec "$CTID" -- chmod +x /opt/homelab/scripts/*.sh
+
+echo "[✓] Files copied to container"
 echo "[✓] Done. Enter CT with: pct enter $CTID"
+echo ""
+echo "Next steps:"
+echo "  1. pct enter $CTID"
+echo "  2. cd /opt/homelab"
+echo "  3. ./ct/bootstrap.sh"
+echo "  4. ./scripts/setup-homelab.sh"
