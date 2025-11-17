@@ -26,11 +26,14 @@ ct_running() { [[ "$(pct status "$CTID" 2>/dev/null || true)" == *"status: runni
 changed=false
 
 # -------- Ensure template exists --------
-if ! pveam list local | awk '{print $2}' | grep -q "$(basename "$TEMPLATE")" && [[ "$TEMPLATE" == local:* ]]; then
-  echo "[!] Template $(basename "$TEMPLATE") not found in local storage."
-  echo "    Download it in UI: local (pve) -> CT Templates -> Templates"
-  echo "    or via CLI: pveam update && pveam download local $(basename "$TEMPLATE")"
-  exit 1
+TEMPLATE_BASENAME=$(basename "$TEMPLATE")
+if [[ "$TEMPLATE" == local:* ]]; then
+  if ! pveam list local 2>/dev/null | grep -q "$TEMPLATE_BASENAME"; then
+    echo "[!] Template $TEMPLATE_BASENAME not found in local storage."
+    echo "    Download it with:"
+    echo "    pveam update && pveam download local $TEMPLATE_BASENAME"
+    exit 1
+  fi
 fi
 
 # -------- Create CT if needed --------
