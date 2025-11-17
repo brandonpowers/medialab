@@ -133,7 +133,6 @@ pct exec "$CTID" -- rm /tmp/homelab.tar.gz
 rm "$TEMP_TAR"
 
 # Make scripts executable
-pct exec "$CTID" -- chmod +x /opt/homelab/ct/bootstrap.sh
 pct exec "$CTID" -- chmod +x /opt/homelab/ct/install-service.sh
 pct exec "$CTID" -- chmod +x /opt/homelab/scripts/*.sh 2>/dev/null || true
 
@@ -143,5 +142,5 @@ echo ""
 echo "Next steps:"
 echo "  1. pct enter $CTID"
 echo "  2. cd /opt/homelab"
-echo "  3. ./ct/bootstrap.sh"
-echo "  4. ./scripts/setup-homelab.sh"
+echo "  3. ./scripts/setup-homelab.sh    # Automated setup with password generation"
+echo "  4. ./ct/install-service.sh       # Optional: Enable auto-start on boot"

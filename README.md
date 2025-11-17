@@ -132,30 +132,16 @@ chmod +x create-ct.sh
 ### 2) On the CT Host
 ```bash
 pct enter 101
-
-git clone https://github.com/<you>/homelab.git /opt/homelab
-cd /opt/homelab/ct
-chmod +x bootstrap.sh install-service.sh
-./bootstrap.sh
-
-# prepare env
 cd /opt/homelab
-cp .env.example .env
 
-# IMPORTANT: Edit .env with your values:
-# - DOMAIN=glaance.io
-# - EMAIL=your-email@example.com
-# - DB_PASSWORD=... (generate with: openssl rand -base64 32)
-# - REDIS_PASSWORD=... (generate with: openssl rand -base64 32)
-# - TMDB_API_KEY=... (get from https://www.themoviedb.org/settings/api)
-# - CLOUDFLARE_TUNNEL_TOKEN=... (see Cloudflare Tunnel Setup section)
-# - TAILSCALE_AUTH_KEY=... (see Tailscale Setup section)
-nano .env
+# Run automated setup (generates passwords, creates .env, deploys stack)
+./scripts/setup-homelab.sh
 
-# start on boot
-cd /opt/homelab/ct
-./install-service.sh
+# Optional: Enable auto-start on boot
+./ct/install-service.sh
 ```
+
+**Note**: The setup script will interactively ask for configuration values (domain, email, API keys, etc.) and automatically generate secure passwords for the database and Redis.
 
 ---
 

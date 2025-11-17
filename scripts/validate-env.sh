@@ -56,7 +56,6 @@ echo ""
 optional_vars=(
   "SONARR_API_KEY"
   "RADARR_API_KEY"
-  "READARR_API_KEY"
 )
 
 echo "Checking optional variables (for Recyclarr)..."

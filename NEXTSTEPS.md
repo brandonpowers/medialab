@@ -1,6 +1,6 @@
 # Future Enhancements
 
-Optional additions and ideas for your homelab media server. Your current 20-service stack is **production-ready** with all essential 2025 features.
+Optional additions and ideas for your homelab media server. Your current 24-service stack is **production-ready** with all essential 2025 features.
 
 ## Immediate Optimizations
 
@@ -102,8 +102,6 @@ unpackerr:
     UN_SONARR_0_API_KEY: ${SONARR_API_KEY}
     UN_RADARR_0_URL: http://radarr:7878
     UN_RADARR_0_API_KEY: ${RADARR_API_KEY}
-    UN_READARR_0_URL: http://readarr:8787
-    UN_READARR_0_API_KEY: ${READARR_API_KEY}
   volumes:
     - ${MEDIA_ROOT}/downloads:/downloads
 ```
@@ -338,7 +336,7 @@ Then disable router-level VPN for better streaming performance.
     Book Title.epub
 ```
 
-Use Sonarr/Radarr/Readarr's "Rename" feature to auto-organize.
+Use Sonarr/Radarr's "Rename" feature to auto-organize.
 
 ## What NOT to Add
 
@@ -360,7 +358,7 @@ Things to avoid to keep your stack lean:
 
 ## Your Stack is Complete!
 
-Remember: Your current 20 services include all essential 2025 features:
+Remember: Your current 24 services include all essential 2025 features:
 - ✅ Privacy-first remote access
 - ✅ Rich media types (movies, TV, music, audiobooks, podcasts, e-books)
 - ✅ Full automation (*arr stack with quality management)
