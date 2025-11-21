@@ -55,26 +55,105 @@ check_directory() {
     print_success "Running in correct directory"
 }
 
+# Install Docker
+install_docker() {
+    print_info "Installing Docker (official method)..."
+
+    # Update package index
+    apt-get update -qq
+
+    # Install prerequisites
+    apt-get install -y ca-certificates curl &>/dev/null
+    install -m 0755 -d /etc/apt/keyrings
+
+    # Add Docker's official GPG key
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+    chmod a+r /etc/apt/keyrings/docker.asc
+
+    # Add Docker repository
+    echo \
+      "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+      $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+      tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+    # Install Docker
+    apt-get update -qq
+    if apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin &>/dev/null; then
+        print_success "Docker installed successfully"
+
+        # Start and enable Docker
+        systemctl start docker
+        systemctl enable docker &>/dev/null
+
+        print_success "Docker service started"
+
+        # Configure Docker daemon
+        configure_docker_daemon
+    else
+        print_error "Failed to install Docker"
+        exit 1
+    fi
+}
+
+# Configure Docker daemon settings
+configure_docker_daemon() {
+    print_info "Configuring Docker daemon..."
+    mkdir -p /etc/docker
+
+    # Check if daemon.json exists
+    if [ -f /etc/docker/daemon.json ]; then
+        print_info "Backing up existing daemon.json..."
+        cp /etc/docker/daemon.json /etc/docker/daemon.json.backup
+    fi
+
+    # Create daemon.json with IPv6 disabled and log rotation
+    cat > /etc/docker/daemon.json <<'DOCKEREOF'
+{
+  "ipv6": false,
+  "log-driver": "json-file",
+  "log-opts": {
+    "max-size": "10m",
+    "max-file": "3"
+  }
+}
+DOCKEREOF
+
+    # Configure Docker for LXC environment (disables AppArmor integration)
+    print_info "Configuring Docker systemd service for LXC environment..."
+    mkdir -p /etc/systemd/system/docker.service.d
+
+    cat > /etc/systemd/system/docker.service.d/lxc-environment.conf <<'SYSTEMDEOF'
+[Service]
+Environment="container=lxc"
+SYSTEMDEOF
+
+    # Reload systemd and restart Docker to apply changes
+    systemctl daemon-reload
+    systemctl restart docker
+    print_success "Docker daemon configured and restarted"
+}
+
 # Check prerequisites
 check_prerequisites() {
     print_section "Checking Prerequisites"
 
-    local missing=0
-
     # Check Docker
     if command -v docker &> /dev/null; then
         print_success "Docker installed: $(docker --version)"
+
+        # Configure Docker daemon even if already installed
+        configure_docker_daemon
     else
-        print_error "Docker not found - please install Docker first"
-        missing=1
+        print_warning "Docker not found - installing..."
+        install_docker
     fi
 
-    # Check Docker Compose
+    # Check Docker Compose (will be installed with Docker)
     if command -v docker compose &> /dev/null; then
         print_success "Docker Compose installed: $(docker compose version)"
     else
-        print_error "Docker Compose not found - please install Docker Compose first"
-        missing=1
+        print_error "Docker Compose not found after Docker installation"
+        exit 1
     fi
 
     # Check openssl
@@ -82,12 +161,13 @@ check_prerequisites() {
         print_success "OpenSSL installed"
     else
         print_error "OpenSSL not found - needed for password generation"
-        missing=1
-    fi
-
-    if [ $missing -eq 1 ]; then
-        print_error "Missing prerequisites. Please install and try again."
-        exit 1
+        print_info "Installing openssl..."
+        if apt-get install -y openssl &>/dev/null; then
+            print_success "OpenSSL installed"
+        else
+            print_error "Failed to install openssl"
+            exit 1
+        fi
     fi
 }
 

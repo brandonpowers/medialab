@@ -88,7 +88,10 @@ touch "$CONF"
 
 append_once "mp0: ${HOST_MEDIA_PATH},mp=/mnt/media" "$CONF"
 append_once "lxc.cgroup2.devices.allow: c 226:* rwm" "$CONF"
+append_once "lxc.cgroup2.devices.allow: a" "$CONF"
 append_once "lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir" "$CONF"
+append_once "lxc.apparmor.profile: unconfined" "$CONF"
+append_once "lxc.cap.drop:" "$CONF"
 
 # -------- Host sysctl for inotify (applies to CT processes) --------
 if ! grep -q "fs.inotify.max_user_watches=1048576" /etc/sysctl.conf 2>/dev/null; then
@@ -149,5 +152,7 @@ echo ""
 echo "Next steps:"
 echo "  1. pct enter $CTID"
 echo "  2. cd /opt/homelab"
-echo "  3. ./scripts/setup-homelab.sh    # Automated setup with password generation"
-echo "  4. ./ct/install-service.sh       # Optional: Enable auto-start on boot"
+echo "  3. chmod +x ./scripts/setup-homelab.sh"
+echo "     ./scripts/setup-homelab.sh    # Automated setup with password generation"
+echo "  4. chmod +x ./ct/install-service.sh"
+echo "     ./ct/install-service.sh       # Optional: Enable auto-start on boot"
