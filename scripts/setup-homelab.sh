@@ -256,6 +256,9 @@ create_directories() {
         "data/tdarr/logs"
         "data/immich"
         "data/tailscale"
+        "data/ovos/config/phal"
+        "data/ovos/share"
+        "data/ovos/tmp"
     )
 
     for dir in "${dirs[@]}"; do
@@ -268,6 +271,110 @@ create_directories() {
     done
 
     print_success "All data directories ready"
+}
+
+# Setup Open Voice OS configuration
+setup_ovos() {
+    print_section "Setting Up Open Voice OS"
+
+    # Create OVOS config file if it doesn't exist
+    if [ ! -f "data/ovos/config/mycroft.conf" ]; then
+        print_info "Creating OVOS configuration file..."
+        cat > data/ovos/config/mycroft.conf << 'EOFCONF'
+{
+  "lang": "en-us",
+  "logs": {
+    "path": "stdout"
+  },
+  "play_wav_cmdline": "paplay %1",
+  "listener": {
+    "wake_word": "hey_mycroft",
+    "stand_up_word": "wake_up",
+    "phoneme_duration": 120,
+    "multiplier": 1.0,
+    "energy_ratio": 1.5,
+    "recording_timeout": 10.0,
+    "recording_timeout_with_silence": 3.0
+  },
+  "stt": {
+    "module": "ovos-stt-plugin-vosk"
+  },
+  "tts": {
+    "module": "ovos-tts-plugin-mimic3"
+  },
+  "gui": {
+    "enabled": true,
+    "idle_display_skill": "skill-ovos-homescreen.openvoiceos"
+  },
+  "skills": {
+    "blacklisted_skills": [],
+    "priority_skills": []
+  },
+  "server": {
+    "disabled": true
+  },
+  "enclosure": {
+    "platform": "generic"
+  }
+}
+EOFCONF
+        print_success "OVOS configuration created"
+    else
+        print_info "OVOS configuration already exists"
+    fi
+
+    # Check for audio device access
+    print_info "Checking audio device availability..."
+    if [ -e /dev/snd ]; then
+        print_success "Audio devices found at /dev/snd"
+    else
+        print_warning "Audio devices not found at /dev/snd"
+        print_warning "OVOS audio services may not work without audio device passthrough"
+        print_info "On Proxmox host, run: pct set <CTID> -dev0 /dev/snd,/dev/snd"
+    fi
+
+    # Check if user is in audio group (idempotent)
+    local CURRENT_USER=$(whoami)
+    if groups "$CURRENT_USER" | grep -q '\baudio\b'; then
+        print_info "User already in audio group"
+    else
+        print_info "Adding user to audio group..."
+        if sudo usermod -aG audio "$CURRENT_USER" 2>/dev/null; then
+            print_success "User added to audio group (requires re-login to take effect)"
+        else
+            print_warning "Could not add user to audio group (may require manual configuration)"
+        fi
+    fi
+
+    # Check for PulseAudio
+    print_info "Checking audio system..."
+    if [ -S "/run/user/1000/pulse/native" ]; then
+        print_success "PulseAudio socket found"
+    elif command -v pulseaudio &> /dev/null; then
+        print_info "PulseAudio installed but socket not found"
+        print_info "Starting PulseAudio..."
+        pulseaudio --start 2>/dev/null || true
+    else
+        print_warning "PulseAudio not found - installing..."
+        if sudo apt-get update && sudo apt-get install -y pulseaudio pulseaudio-utils 2>/dev/null; then
+            print_success "PulseAudio installed"
+            pulseaudio --start 2>/dev/null || true
+        else
+            print_warning "Could not install PulseAudio automatically"
+        fi
+    fi
+
+    # Enable user lingering (idempotent)
+    if loginctl show-user "$CURRENT_USER" 2>/dev/null | grep -q "Linger=yes"; then
+        print_info "User lingering already enabled"
+    else
+        print_info "Enabling user lingering..."
+        if sudo loginctl enable-linger "$CURRENT_USER" 2>/dev/null; then
+            print_success "User lingering enabled"
+        else
+            print_warning "Could not enable user lingering (may require manual configuration)"
+        fi
+    fi
 }
 
 # Validate docker-compose.yml
@@ -401,6 +508,7 @@ show_access_info() {
     echo "  Radarr:         http://homelab-media:7878"
     echo "  Prowlarr:       http://homelab-media:9696"
     echo "  Uptime Kuma:    http://homelab-media:3001"
+    echo "  OVOS GUI:       http://homelab-media:8484"
     echo "  (and more...)"
 
     echo -e "\n${YELLOW}Next Steps:${NC}"
@@ -424,6 +532,7 @@ main() {
     check_prerequisites
     generate_env
     create_directories
+    setup_ovos
     validate_compose
     pull_images
     start_services

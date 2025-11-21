@@ -477,6 +477,116 @@ services:
       - ./data/immich/model-cache:/cache
     logging: *default-logging
 
+  # ============================================
+  # OPEN VOICE OS - Voice Assistant
+  # ============================================
+
+  ovos-messagebus:
+    image: smartgic/ovos-messagebus:alpha
+    container_name: ovos-messagebus
+    restart: unless-stopped
+    ports:
+      - "8181:8181"
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/ovos/config:/home/ovos/.config/mycroft:ro
+      - ./data/ovos/tmp:/tmp/mycroft
+    logging: *default-logging
+
+  ovos-core:
+    image: smartgic/ovos-core:alpha
+    container_name: ovos-core
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+    volumes:
+      - ./data/ovos/config:/home/ovos/.config/mycroft:ro
+      - ./data/ovos/share:/home/ovos/.local/share/mycroft
+      - ./data/ovos/tmp:/tmp/mycroft
+    depends_on:
+      - ovos-messagebus
+    logging: *default-logging
+
+  ovos-audio:
+    image: smartgic/ovos-audio:alpha
+    container_name: ovos-audio
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
+    volumes:
+      - ./data/ovos/config:/home/ovos/.config/mycroft:ro
+      - ./data/ovos/share:/home/ovos/.local/share/mycroft
+      - ./data/ovos/tmp:/tmp/mycroft
+      - /run/user/1000/pulse:/run/user/1000/pulse:ro
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio
+    depends_on:
+      - ovos-messagebus
+    logging: *default-logging
+
+  ovos-listener:
+    image: smartgic/ovos-listener:alpha
+    container_name: ovos-listener
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
+    volumes:
+      - ./data/ovos/config:/home/ovos/.config/mycroft:ro
+      - ./data/ovos/share:/home/ovos/.local/share/mycroft
+      - ./data/ovos/tmp:/tmp/mycroft
+      - /run/user/1000/pulse:/run/user/1000/pulse:ro
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio
+    depends_on:
+      - ovos-messagebus
+    logging: *default-logging
+
+  ovos-phal:
+    image: smartgic/ovos-phal:alpha
+    container_name: ovos-phal
+    restart: unless-stopped
+    environment:
+      <<: *common-env
+      PULSE_SERVER: unix:/run/user/1000/pulse/native
+    volumes:
+      - ./data/ovos/config:/home/ovos/.config/mycroft:ro
+      - ./data/ovos/config/phal:/home/ovos/.config/mycroft/phal:ro
+      - ./data/ovos/share:/home/ovos/.local/share/mycroft
+      - ./data/ovos/tmp:/tmp/mycroft
+      - /run/user/1000/pulse:/run/user/1000/pulse:ro
+    devices:
+      - /dev/snd:/dev/snd
+    group_add:
+      - audio
+    depends_on:
+      - ovos-messagebus
+    logging: *default-logging
+
+  ovos-gui:
+    image: smartgic/ovos-gui:alpha
+    container_name: ovos-gui
+    restart: unless-stopped
+    ports:
+      - "8484:8484"
+    environment:
+      <<: *common-env
+      DISPLAY: :0
+    volumes:
+      - ./data/ovos/config:/home/ovos/.config/mycroft:ro
+      - ./data/ovos/share:/home/ovos/.local/share/mycroft
+      - ./data/ovos/tmp:/tmp/mycroft
+      - /tmp/.X11-unix:/tmp/.X11-unix:ro
+    depends_on:
+      - ovos-messagebus
+    logging: *default-logging
+
 volumes:
   portainer_data:
   uptime_kuma_data:
