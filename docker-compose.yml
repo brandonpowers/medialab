@@ -98,20 +98,8 @@ services:
       - "5055:5055"
     environment:
       <<: *common-env
-      DB_TYPE: postgres
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_USER: ${DB_USER:-homelab}
-      DB_PASS: ${DB_PASSWORD}
-      DB_NAME: jellyseerr
     volumes:
       - ./data/jellyseerr/config:/app/config
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - backend
-      - default
     logging: *default-logging
 
   audiobookshelf:
@@ -362,7 +350,7 @@ services:
     environment:
       POSTGRES_USER: ${DB_USER:-homelab}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_MULTIPLE_DATABASES: immich,jellyseerr,uptimekuma
+      POSTGRES_MULTIPLE_DATABASES: immich,uptimekuma
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/create-multiple-postgres-databases.sh:/docker-entrypoint-initdb.d/create-multiple-postgres-databases.sh
