@@ -318,6 +318,7 @@ services:
       ARM_GID: ${PGID}
     devices:
       - /dev/sr0:/dev/sr0
+      - /dev/dri:/dev/dri  # GPU hardware acceleration for transcoding
     volumes:
       - ./data/arm/config:/etc/arm/config
       - ./data/arm/db:/home/arm/db
