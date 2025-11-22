@@ -78,8 +78,8 @@ mkdir -p "$HOST_MEDIA_PATH"
 # Create all required media subdirectories
 mkdir -p "$HOST_MEDIA_PATH"/{movies,tv,music,audiobooks,books,podcasts,downloads/{complete,incomplete},photos}
 
-# Set proper ownership (1000:1000 is typical for unprivileged containers)
-chown -R 1000:1000 "$HOST_MEDIA_PATH" 2>/dev/null || true
+# Set proper ownership for unprivileged containers (container UID 1000 = host UID 101000)
+chown -R 101000:101000 "$HOST_MEDIA_PATH" 2>/dev/null || true
 chmod -R 775 "$HOST_MEDIA_PATH" 2>/dev/null || true
 
 # -------- Update CT config (idempotent) --------
