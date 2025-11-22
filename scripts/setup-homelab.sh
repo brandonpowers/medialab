@@ -340,6 +340,13 @@ create_directories() {
         fi
     done
 
+    # Fix ownership for ARM directories (requires PUID:PGID)
+    if [ -d "data/arm" ]; then
+        print_info "Setting ownership for ARM directories..."
+        chown -R ${PUID}:${PGID} data/arm
+        print_success "ARM directory ownership set to ${PUID}:${PGID}"
+    fi
+
     print_success "All data directories ready"
 }
 
