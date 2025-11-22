@@ -201,12 +201,9 @@ generate_env() {
     # Generate all passwords and tokens
     local DB_PASSWORD=$(generate_password)
     local REDIS_PASSWORD=$(generate_password)
-    local GITEA_SECRET_KEY=$(generate_password)
-    local GITEA_INTERNAL_TOKEN=$(generate_password)
 
     print_success "Generated database password"
     print_success "Generated Redis password"
-    print_success "Generated Gitea secrets"
 
     # Prompt for required values
     print_info "\nPlease provide the following information:"
@@ -272,13 +269,6 @@ DB_USER=homelab
 DB_PASSWORD=${DB_PASSWORD}
 REDIS_PASSWORD=${REDIS_PASSWORD}
 
-# Gitea Configuration
-GITEA_DOMAIN=homelab-media
-GITEA_ROOT_URL=http://homelab-media:3000/
-GITEA_SECRET_KEY=${GITEA_SECRET_KEY}
-GITEA_INTERNAL_TOKEN=${GITEA_INTERNAL_TOKEN}
-GITEA_RUNNER_TOKEN=  # Will be set after Gitea first run
-
 # API Keys
 TMDB_API_KEY=${TMDB_API_KEY}
 
@@ -296,8 +286,6 @@ KEEP THIS FILE SECURE!
 
 Database Password: ${DB_PASSWORD}
 Redis Password: ${REDIS_PASSWORD}
-Gitea Secret Key: ${GITEA_SECRET_KEY}
-Gitea Internal Token: ${GITEA_INTERNAL_TOKEN}
 
 These passwords have been added to .env
 Consider storing them in a password manager and deleting this file.
@@ -313,8 +301,6 @@ create_directories() {
     print_section "Creating Data Directories"
 
     local dirs=(
-        "data/gitea"
-        "data/gitea-runner"
         "data/homarr/configs"
         "data/homarr/icons"
         "data/jellyfin/config"
@@ -334,6 +320,10 @@ create_directories() {
         "data/tdarr/server"
         "data/tdarr/configs"
         "data/tdarr/logs"
+        "data/arm/config"
+        "data/arm/db"
+        "data/arm/logs"
+        "data/arm/media"
         "data/immich"
         "data/tailscale"
         "data/ovos/config/phal"
@@ -551,7 +541,7 @@ verify_databases() {
 
     print_info "Checking PostgreSQL databases..."
 
-    local databases=("immich" "jellyseerr" "uptimekuma" "gitea")
+    local databases=("immich" "uptimekuma")
 
     for db in "${databases[@]}"; do
         if docker exec postgres psql -U homelab -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$db"; then
@@ -594,9 +584,8 @@ show_access_info() {
     echo -e "\n${YELLOW}Next Steps:${NC}"
     echo "  1. Configure Cloudflare Tunnel routes (see README.md)"
     echo "  2. Set up Tailscale (see README.md)"
-    echo "  3. Complete Gitea setup: http://homelab-media:3000"
-    echo "  4. Configure media libraries in *arr apps"
-    echo "  5. See GITEA_SETUP.md for CI/CD configuration"
+    echo "  3. Configure media libraries in *arr apps"
+    echo "  4. Configure ARM for Blu-ray ripping: http://192.168.8.202:8090"
 
     echo -e "\n${YELLOW}Important Files:${NC}"
     echo "  .passwords.txt - Auto-generated passwords (DELETE after storing securely)"

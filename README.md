@@ -90,8 +90,8 @@ cd /opt/homelab
 - **[Monitoring & Management](docs/monitoring.md)** - Uptime Kuma, Portainer, Tdarr
 
 ### Special Features
-- **[Gitea (Git + CI/CD)](docs/gitea.md)** - Self-hosted Git with auto-deployment
-- **[Open Voice OS](docs/ovos.md)** - Privacy-first voice assistant
+- **Automatic Blu-ray Ripping** - ARM automatically rips and transcodes discs with GPU acceleration
+- **[Open Voice OS](docs/ovos.md)** - Privacy-first voice assistant (disabled by default)
 - **[Future Enhancements](docs/future-enhancements.md)** - Optional additions
 
 ## Architecture
@@ -131,8 +131,8 @@ cd /opt/homelab
 │  │  │    Audiobookshelf, Calibre-Web, Immich       │  │  │
 │  │  │                                               │  │  │
 │  │  │  PRIVATE (via Tailscale):                    │  │  │
-│  │  │    *arr apps, Downloads, Tdarr               │  │  │
-│  │  │    Portainer, Uptime Kuma, OVOS, Gitea       │  │  │
+│  │  │    *arr apps, Downloads, Tdarr, ARM          │  │  │
+│  │  │    Portainer, Uptime Kuma, OVOS              │  │  │
 │  │  │                                               │  │  │
 │  │  │  BACKEND: PostgreSQL, Redis                  │  │  │
 │  │  └──────────────────────────────────────────────┘  │  │
@@ -170,10 +170,10 @@ Secure access from **authorized devices only**:
 - **qBittorrent** → http://homelab-media:8080
 - **SABnzbd** → http://homelab-media:8085
 - **Tdarr** → http://homelab-media:8265
+- **ARM (Blu-ray Ripper)** → http://homelab-media:8090
 - **Portainer** → https://homelab-media:9443
 - **Uptime Kuma** → http://homelab-media:3001
-- **Gitea** → http://homelab-media:3000
-- **OVOS GUI** → http://homelab-media:8484
+- **OVOS GUI** → http://homelab-media:8484 (disabled by default)
 
 ### Local Network Access
 Direct access within your home network at `http://CT-IP:PORT`

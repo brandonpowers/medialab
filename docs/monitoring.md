@@ -72,7 +72,7 @@ Prowlarr → http://prowlarr:9696
 Bazarr → http://bazarr:6767
 qBittorrent → http://qbittorrent:8080
 SABnzbd → http://sabnzbd:8080
-Gitea → http://gitea:3000
+ARM (Blu-ray Ripper) → http://arm:8090
 Portainer → https://portainer:9443
 ```
 
