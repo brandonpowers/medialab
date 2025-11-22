@@ -306,6 +306,27 @@ services:
       - /tmp/tdarr:/temp
     logging: *default-logging
 
+  makemkv:
+    image: jlesage/makemkv:latest
+    container_name: makemkv
+    restart: unless-stopped
+    ports:
+      - "5800:5800"  # Web UI (noVNC)
+    environment:
+      <<: *common-env
+      USER_ID: ${PUID}
+      GROUP_ID: ${PGID}
+      MAKEMKV_KEY: BETA  # Uses beta key which is updated monthly
+      AUTO_DISC_RIPPER: "0"  # Set to 1 for automatic ripping when disc inserted
+      AUTO_DISC_RIPPER_EJECT: "0"
+    devices:
+      - /dev/sr0:/dev/sr0
+    volumes:
+      - ./data/makemkv/config:/config
+      - ${MEDIA_ROOT}/downloads/complete:/output
+      - ./data/makemkv/appdata:/storage
+    logging: *default-logging
+
   uptime-kuma:
     image: louislam/uptime-kuma:latest
     container_name: uptime-kuma
