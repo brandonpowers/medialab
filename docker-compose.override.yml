@@ -1,0 +1,13 @@
+services:
+  ovos-messagebus:
+    profiles: ["ovos"]
+  ovos-phal:
+    profiles: ["ovos"]
+  ovos-audio:
+    profiles: ["ovos"]
+  ovos-listener:
+    profiles: ["ovos"]
+  ovos-core:
+    profiles: ["ovos"]
+  ovos-gui:
+    profiles: ["ovos"]
