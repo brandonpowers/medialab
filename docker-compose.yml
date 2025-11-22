@@ -306,25 +306,24 @@ services:
       - /tmp/tdarr:/temp
     logging: *default-logging
 
-  makemkv:
-    image: jlesage/makemkv:latest
-    container_name: makemkv
+  arm:
+    image: automaticrippingmachine/automatic-ripping-machine:latest
+    container_name: arm
     restart: unless-stopped
     ports:
-      - "5800:5800"  # Web UI (noVNC)
+      - "8090:8080"  # Web UI
     environment:
       <<: *common-env
-      USER_ID: ${PUID}
-      GROUP_ID: ${PGID}
-      MAKEMKV_KEY: BETA  # Uses beta key which is updated monthly
-      AUTO_DISC_RIPPER: "0"  # Set to 1 for automatic ripping when disc inserted
-      AUTO_DISC_RIPPER_EJECT: "0"
+      ARM_UID: ${PUID}
+      ARM_GID: ${PGID}
     devices:
       - /dev/sr0:/dev/sr0
     volumes:
-      - ./data/makemkv/config:/config
-      - ${MEDIA_ROOT}/downloads/complete:/output
-      - ./data/makemkv/appdata:/storage
+      - ./data/arm/config:/etc/arm/config
+      - ./data/arm/db:/home/arm/db
+      - ./data/arm/logs:/home/arm/logs
+      - ./data/arm/media:/home/arm/media  # Temporary storage during ripping
+      - ${MEDIA_ROOT}/movies:/home/arm/movies  # Final output location
     logging: *default-logging
 
   uptime-kuma:
