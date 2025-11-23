@@ -101,6 +101,19 @@ if ! grep -q "fs.inotify.max_user_watches=1048576" /etc/sysctl.conf 2>/dev/null;
   sysctl --system || true
 fi
 
+# -------- Configure optical drive permissions for ARM --------
+UDEV_RULE="/etc/udev/rules.d/99-optical.rules"
+if [ ! -f "$UDEV_RULE" ]; then
+  echo "[*] Setting up optical drive permissions for ARM"
+  echo 'KERNEL=="sr[0-9]*", MODE="0666"' > "$UDEV_RULE"
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger 2>/dev/null || true
+  # Apply permissions immediately if device exists
+  if [ -e /dev/sr0 ]; then
+    chmod 666 /dev/sr0 2>/dev/null || true
+  fi
+fi
+
 # -------- Start/restart CT if needed --------
 if ct_running; then
   if [[ "$changed" == true ]]; then
