@@ -328,26 +328,13 @@ services:
     logging: *default-logging
 
   uptime-kuma:
-    image: louislam/uptime-kuma:latest
+    image: louislam/uptime-kuma:2
     container_name: uptime-kuma
     restart: unless-stopped
     ports:
       - "3001:3001"
-    environment:
-      UPTIME_KUMA_DB_TYPE: postgres
-      UPTIME_KUMA_DB_HOSTNAME: postgres
-      UPTIME_KUMA_DB_PORT: 5432
-      UPTIME_KUMA_DB_NAME: uptimekuma
-      UPTIME_KUMA_DB_USERNAME: ${DB_USER:-homelab}
-      UPTIME_KUMA_DB_PASSWORD: ${DB_PASSWORD}
     volumes:
       - uptime_kuma_data:/app/data
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - backend
-      - default
     logging: *default-logging
 
   # ============================================
@@ -362,7 +349,7 @@ services:
     environment:
       POSTGRES_USER: ${DB_USER:-homelab}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
-      POSTGRES_MULTIPLE_DATABASES: immich,uptimekuma
+      POSTGRES_MULTIPLE_DATABASES: immich
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/create-multiple-postgres-databases.sh:/docker-entrypoint-initdb.d/create-multiple-postgres-databases.sh

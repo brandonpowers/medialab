@@ -6,7 +6,7 @@ Shared database and caching services used by multiple applications.
 
 | Service | Purpose | Used By | Port |
 |---------|---------|---------|------|
-| **PostgreSQL** | Relational database | Immich, Uptime Kuma | 5432 |
+| **PostgreSQL** | Relational database | Immich | 5432 |
 | **Redis** | In-memory cache | Immich | 6379 |
 
 **Note:** Ports are not exposed externally - internal Docker network only.
@@ -32,9 +32,8 @@ The following databases are automatically created:
 | Database | Used By | Purpose |
 |----------|---------|---------|
 | `immich` | Immich | Photo metadata, users, albums |
-| `uptimekuma` | Uptime Kuma | Monitors, notifications, uptime data |
 
-**Note:** Jellyseerr uses its own internal SQLite database for simplicity.
+**Note:** Jellyseerr and Uptime Kuma use their own internal SQLite databases for simplicity.
 
 ### Configuration
 
@@ -50,7 +49,7 @@ Host: postgres
 Port: 5432
 User: homelab
 Password: <from .env>
-Databases: immich, uptimekuma
+Databases: immich
 ```
 
 ### Access Database

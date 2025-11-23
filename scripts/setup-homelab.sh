@@ -554,7 +554,7 @@ verify_databases() {
 
     print_info "Checking PostgreSQL databases..."
 
-    local databases=("immich" "uptimekuma")
+    local databases=("immich")
 
     for db in "${databases[@]}"; do
         if docker exec postgres psql -U homelab -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$db"; then
