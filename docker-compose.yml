@@ -54,16 +54,15 @@ services:
   # ============================================
 
   homarr:
-    image: ghcr.io/ajnart/homarr:latest
+    image: ghcr.io/homarr-labs/homarr:latest
     container_name: homarr
     restart: unless-stopped
     ports:
       - "7575:7575"
     environment:
-      <<: *common-env
+      SECRET_ENCRYPTION_KEY: ${HOMARR_ENCRYPTION_KEY}
     volumes:
-      - ./data/homarr/configs:/app/data/configs
-      - ./data/homarr/icons:/app/public/icons
+      - ./data/homarr/appdata:/appdata
       - /var/run/docker.sock:/var/run/docker.sock
     logging: *default-logging
 
@@ -213,6 +212,19 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
+    logging: *default-logging
+
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    restart: unless-stopped
+    ports:
+      - "8191:8191"
+    environment:
+      LOG_LEVEL: info
+      LOG_HTML: false
+      CAPTCHA_SOLVER: none
+      TZ: ${TZ}
     logging: *default-logging
 
   bazarr:
