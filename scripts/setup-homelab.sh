@@ -201,9 +201,11 @@ generate_env() {
     # Generate all passwords and tokens
     local DB_PASSWORD=$(generate_password)
     local REDIS_PASSWORD=$(generate_password)
+    local HOMARR_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
     print_success "Generated database password"
     print_success "Generated Redis password"
+    print_success "Generated Homarr encryption key"
 
     # Prompt for required values
     print_info "\nPlease provide the following information:"
@@ -269,6 +271,9 @@ DB_USER=homelab
 DB_PASSWORD=${DB_PASSWORD}
 REDIS_PASSWORD=${REDIS_PASSWORD}
 
+# Homarr v1.0 (Auto-generated)
+HOMARR_ENCRYPTION_KEY=${HOMARR_ENCRYPTION_KEY}
+
 # API Keys
 TMDB_API_KEY=${TMDB_API_KEY}
 
@@ -286,6 +291,7 @@ KEEP THIS FILE SECURE!
 
 Database Password: ${DB_PASSWORD}
 Redis Password: ${REDIS_PASSWORD}
+Homarr Encryption Key: ${HOMARR_ENCRYPTION_KEY}
 
 These passwords have been added to .env
 Consider storing them in a password manager and deleting this file.
