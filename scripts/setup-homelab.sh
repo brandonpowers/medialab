@@ -563,13 +563,18 @@ UDEV_EOF
 
     print_success "Udev rule created at /etc/udev/rules.d/99-arm-docker.rules"
 
-    # Reload udev rules
+    # Reload udev rules (may fail in LXC containers - that's okay)
     print_info "Reloading udev rules..."
-    sudo udevadm control --reload
-    print_success "Udev rules reloaded"
+    if sudo udevadm control --reload 2>/dev/null; then
+        print_success "Udev rules reloaded"
+    else
+        print_warning "Could not reload udev (expected in LXC containers)"
+        print_info "Udev rules will be active after container restart or disc insertion"
+    fi
 
     print_success "ARM automatic disc detection configured!"
     print_info "Insert a disc to test auto-ripping"
+    print_info "Monitor with: tail -f /var/log/arm-wrapper.log"
 }
 
 # Validate docker-compose.yml
