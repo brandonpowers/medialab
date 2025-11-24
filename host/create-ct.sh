@@ -91,6 +91,7 @@ append_once "lxc.cgroup2.devices.allow: c 226:* rwm" "$CONF"
 append_once "lxc.cgroup2.devices.allow: a" "$CONF"
 append_once "lxc.mount.entry: /dev/dri dev/dri none bind,optional,create=dir" "$CONF"
 append_once "lxc.mount.entry: /dev/sr0 dev/sr0 none bind,optional,create=file" "$CONF"
+append_once "lxc.mount.entry: /dev/sg1 dev/sg1 none bind,optional,create=file" "$CONF"
 append_once "lxc.apparmor.profile: unconfined" "$CONF"
 append_once "lxc.cap.drop:" "$CONF"
 

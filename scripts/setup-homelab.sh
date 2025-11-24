@@ -351,6 +351,12 @@ create_directories() {
         print_info "Setting ownership for ARM directories..."
         chown -R ${PUID}:${PGID} data/arm
         print_success "ARM directory ownership set to ${PUID}:${PGID}"
+
+        # Fix ARM config file permissions for web UI write access
+        if [ -f "data/arm/config/arm.yaml" ]; then
+            chmod 664 data/arm/config/arm.yaml
+            print_success "ARM config file permissions set to 664"
+        fi
     fi
 
     print_success "All data directories ready"
@@ -458,6 +464,112 @@ EOFCONF
             print_warning "Could not enable user lingering (may require manual configuration)"
         fi
     fi
+}
+
+# Setup ARM (Automatic Ripping Machine) udev auto-detection
+setup_arm_udev() {
+    print_section "Setting Up ARM Automatic Disc Detection"
+
+    # Check if optical drive exists
+    if [ ! -e /dev/sr0 ]; then
+        print_warning "No optical drive found at /dev/sr0"
+        print_info "Skipping ARM udev configuration"
+        return
+    fi
+
+    print_success "Optical drive found at /dev/sr0"
+
+    # Create ARM scripts directory
+    if [ ! -d "/opt/arm/scripts" ]; then
+        print_info "Creating /opt/arm/scripts directory..."
+        sudo mkdir -p /opt/arm/scripts
+    fi
+
+    # Create udev wrapper script for docker-compose
+    print_info "Creating ARM udev wrapper script..."
+    sudo tee /opt/arm/scripts/docker_arm_wrapper.sh > /dev/null << 'WRAPPER_EOF'
+#!/bin/bash
+# ARM udev wrapper for docker-compose
+# This script is called by udev when an optical disc is inserted
+
+set -euo pipefail
+
+DEVNAME="$1"
+CONTAINER_NAME="arm"
+HOMELAB_DIR="/opt/homelab"
+
+# Wait for disc to be fully readable
+sleep 5
+
+echo "$(date) [ARM] Entering docker wrapper for ${DEVNAME}" >> /var/log/arm-wrapper.log
+
+# Exit if udev properties not available yet
+if [[ -z "${!ID_CDROM_MEDIA_*}" ]] ; then
+    echo "$(date) [ARM] Disc not ready yet, exiting" >> /var/log/arm-wrapper.log
+    exit 0
+fi
+
+# Fix device path if needed
+if [[ ! -b "${DEVNAME}" && -b "/dev/${DEVNAME}" ]] ; then
+    DEVNAME="/dev/${DEVNAME}"
+fi
+
+# Get disc type and label from udev
+if [[ -z "${!ID_CDROM_MEDIA_*}" ]] ; then
+    eval "$(udevadm info --query=env --export "${DEVNAME}")"
+fi
+
+# Determine disc type
+if [ "$ID_CDROM_MEDIA_DVD" == "1" ]; then
+    DISC_TYPE="DVD"
+elif [ "$ID_CDROM_MEDIA_BD" == "1" ]; then
+    DISC_TYPE="Blu-ray"
+elif [ "$ID_CDROM_MEDIA_CD" == "1" ] || [ "$ID_CDROM_MEDIA_CD_R" == "1" ] || [ "$ID_CDROM_MEDIA_CD_RW" == "1" ]; then
+    DISC_TYPE="CD"
+elif [ -n "$ID_FS_TYPE" ]; then
+    DISC_TYPE="Data"
+else
+    echo "$(date) [ARM] Unknown disc type, exiting" >> /var/log/arm-wrapper.log
+    exit 0
+fi
+
+echo "$(date) [ARM] Detected ${DISC_TYPE} disc (label: ${ID_FS_LABEL:-unknown}) on ${DEVNAME}" >> /var/log/arm-wrapper.log
+
+# Start ARM in the existing docker-compose container
+# Export udev environment variables so ARM can read disc properties
+cd "${HOMELAB_DIR}"
+docker compose exec -T \
+    -e ID_CDROM_MEDIA_DVD="${ID_CDROM_MEDIA_DVD:-0}" \
+    -e ID_CDROM_MEDIA_BD="${ID_CDROM_MEDIA_BD:-0}" \
+    -e ID_CDROM_MEDIA_CD="${ID_CDROM_MEDIA_CD:-0}" \
+    -e ID_FS_LABEL="${ID_FS_LABEL:-}" \
+    "${CONTAINER_NAME}" \
+    /opt/arm/scripts/docker/docker_arm_wrapper.sh "${DEVNAME##*/}" \
+    >> /var/log/arm-wrapper.log 2>&1
+
+echo "$(date) [ARM] Rip started successfully" >> /var/log/arm-wrapper.log
+WRAPPER_EOF
+
+    sudo chmod +x /opt/arm/scripts/docker_arm_wrapper.sh
+    print_success "ARM wrapper script created at /opt/arm/scripts/docker_arm_wrapper.sh"
+
+    # Create udev rule
+    print_info "Creating udev rule..."
+    sudo tee /etc/udev/rules.d/99-arm-docker.rules > /dev/null << 'UDEV_EOF'
+# ARM (Automatic Ripping Machine) udev rule for docker-compose
+# Triggers ARM wrapper when optical disc is inserted
+ACTION=="change", SUBSYSTEM=="block", ENV{DISK_MEDIA_CHANGE}=="1", ENV{ID_TYPE}=="cd", RUN+="/opt/arm/scripts/docker_arm_wrapper.sh %k"
+UDEV_EOF
+
+    print_success "Udev rule created at /etc/udev/rules.d/99-arm-docker.rules"
+
+    # Reload udev rules
+    print_info "Reloading udev rules..."
+    sudo udevadm control --reload
+    print_success "Udev rules reloaded"
+
+    print_success "ARM automatic disc detection configured!"
+    print_info "Insert a disc to test auto-ripping"
 }
 
 # Validate docker-compose.yml
@@ -585,8 +697,6 @@ show_access_info() {
     echo "  Calibre-web:    https://books.${DOMAIN:-glaance.io}"
 
     echo -e "\n${BLUE}Admin Services (via Tailscale):${NC}"
-    echo "  Gitea:          http://homelab-media:3000"
-    echo "  Portainer:      https://homelab-media:9443"
     echo "  Sonarr:         http://homelab-media:8989"
     echo "  Radarr:         http://homelab-media:7878"
     echo "  Prowlarr:       http://homelab-media:9696"
@@ -615,6 +725,7 @@ main() {
     generate_env
     create_directories
     setup_ovos
+    setup_arm_udev
     validate_compose
     pull_images
     start_services

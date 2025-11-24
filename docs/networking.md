@@ -198,7 +198,7 @@ Or just open in browser:
 
 ## Tailscale Setup
 
-Admin services (Sonarr, Radarr, Portainer, etc.) should **NOT** be publicly accessible. Use Tailscale for secure private access.
+Admin services (Sonarr, Radarr, etc.) should **NOT** be publicly accessible. Use Tailscale for secure private access.
 
 ### Step 1: Get Auth Key
 
@@ -261,7 +261,6 @@ Check Tailscale admin:
    - qBittorrent: `http://homelab-media:8080`
    - SABnzbd: `http://homelab-media:8085`
    - Tdarr: `http://homelab-media:8265`
-   - Portainer: `https://homelab-media:9443`
    - Uptime Kuma: `http://homelab-media:3001`
    - OVOS GUI: `http://homelab-media:8484`
 
@@ -377,7 +376,7 @@ tailscale status  # Should show homelab-media
 │  │  │                                               │  │  │
 │  │  │  PRIVATE (via Tailscale):                    │  │  │
 │  │  │    *arr apps, Downloads, Tdarr               │  │  │
-│  │  │    Portainer, Uptime Kuma, OVOS, Gitea       │  │  │
+│  │  │    Uptime Kuma, OVOS                         │  │  │
 │  │  └──────────────────────────────────────────────┘  │  │
 │  └────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────┘

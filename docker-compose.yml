@@ -135,18 +135,6 @@ services:
   # (Access via Tailscale only)
   # ============================================
 
-  portainer:
-    image: portainer/portainer-ce:latest
-    container_name: portainer
-    restart: unless-stopped
-    ports:
-      - "9000:9000"
-      - "9443:9443"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - portainer_data:/data
-    logging: *default-logging
-
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
@@ -310,6 +298,7 @@ services:
     image: automaticrippingmachine/automatic-ripping-machine:latest
     container_name: arm
     restart: unless-stopped
+    privileged: true  # Required for full optical drive access and udev integration
     ports:
       - "8090:8080"  # Web UI
     environment:
@@ -318,6 +307,7 @@ services:
       ARM_GID: ${PGID}
     devices:
       - /dev/sr0:/dev/sr0
+      - /dev/sg1:/dev/sg1  # SCSI generic device for optical drive
       - /dev/dri:/dev/dri  # GPU hardware acceleration for transcoding
     volumes:
       - ./data/arm/config:/etc/arm/config
@@ -325,6 +315,7 @@ services:
       - ./data/arm/logs:/home/arm/logs
       - ./data/arm/media:/home/arm/media  # Temporary storage during ripping
       - ${MEDIA_ROOT}/movies:/home/arm/movies  # Final output location
+      - /run/udev:/run/udev:ro  # udev events for automatic disc detection
     logging: *default-logging
 
   uptime-kuma:
@@ -536,7 +527,6 @@ services:
     logging: *default-logging
 
 volumes:
-  portainer_data:
   uptime_kuma_data:
   postgres_data:
   redis_data:

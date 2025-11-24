@@ -7,7 +7,6 @@ Services for monitoring, managing, and optimizing your homelab.
 | Service | Purpose | Access | Port |
 |---------|---------|--------|------|
 | **Uptime Kuma** | Service monitoring and uptime tracking | Private (Tailscale) | 3001 |
-| **Portainer** | Docker container management UI | Private (Tailscale) | 9443 |
 | **Tdarr** | Automated video transcoding | Private (Tailscale) | 8265 |
 
 ---
@@ -73,7 +72,6 @@ Bazarr → http://bazarr:6767
 qBittorrent → http://qbittorrent:8080
 SABnzbd → http://sabnzbd:8080
 ARM (Blu-ray Ripper) → http://arm:8090
-Portainer → https://portainer:9443
 ```
 
 **Backend Services:**
@@ -150,108 +148,6 @@ Tailscale → Check admin console
 2. Set start and end time
 3. Select affected monitors
 4. Notifications paused during maintenance
-
----
-
-## Portainer - Docker Management
-
-Web-based Docker container management interface.
-
-### Features
-
-- Container management (start, stop, restart, logs)
-- Image management (pull, remove)
-- Network management
-- Volume management
-- Stack deployment (docker-compose)
-- Container stats (CPU, RAM, network)
-- Container console access
-- User management
-
-### Initial Setup
-
-1. **Access:** https://homelab-media:9443 (via Tailscale)
-
-2. **First Time Setup:**
-   - Create admin account
-   - Set strong password
-   - **Important:** Password cannot be reset without database access!
-
-3. **Connect to Docker:**
-   - Select "Docker" environment
-   - Connect via socket (already configured)
-   - Docker socket: `/var/run/docker.sock`
-
-### Container Management
-
-**View Containers:**
-- Containers → Container list
-- See all running containers
-- Quick stats (CPU, RAM, status)
-
-**Container Actions:**
-- **Start/Stop/Restart**: Click container → actions
-- **View Logs**: Click container → Logs → Tail logs
-- **Stats**: Click container → Stats (real-time graphs)
-- **Console**: Click container → Console (exec into container)
-
-**Bulk Actions:**
-- Select multiple containers
-- Stop/start/restart all selected
-
-### Stack Management
-
-**View Current Stack:**
-- Stacks → homelab
-- See all services in docker-compose
-- Quick status view
-
-**Update Stack:**
-1. Stacks → homelab → Editor
-2. Edit docker-compose.yml
-3. Update stack
-4. **Warning:** Use git and automated deployment instead!
-
-### Images
-
-**View Images:**
-- Images → Image list
-- See all pulled images
-- Check image sizes
-
-**Pull New Images:**
-- Images → Pull image
-- Enter image name and tag
-- Pull image
-
-**Remove Unused Images:**
-- Images → Select unused images
-- Remove selected
-
-### Volumes
-
-**View Volumes:**
-- Volumes → Volume list
-- See all Docker volumes
-- Check sizes
-
-**Browse Volume:**
-- Click volume → Browse
-- View/download files (limited)
-
-### Networks
-
-**View Networks:**
-- Networks → Network list
-- See Docker networks
-- Check connected containers
-
-### Notifications
-
-**Configure Portainer Notifications:**
-- Settings → Notifications
-- Webhook endpoints
-- Notify on container events
 
 ---
 
@@ -418,14 +314,6 @@ Settings → Workers
 - See service status at a glance
 - No login required
 
-### Portainer + Docker Management
-
-**Quick Actions:**
-- Restart services without SSH
-- View logs for debugging
-- Monitor resource usage
-- Update images
-
 ### Tdarr + Storage Management
 
 **Automatic Optimization:**
@@ -456,23 +344,6 @@ docker compose logs uptime-kuma
 - Check webhook URLs are correct
 - Verify bot tokens/credentials
 - Check firewall rules
-
-### Portainer
-
-**Can't login:**
-```bash
-# Reset admin password (requires database access)
-docker compose stop portainer
-docker run --rm -v portainer_data:/data portainer/helper-reset-password
-
-# Restart Portainer
-docker compose up -d portainer
-```
-
-**Can't see containers:**
-- Verify Docker socket is mounted
-- Check Portainer has permission to `/var/run/docker.sock`
-- Restart Portainer
 
 ### Tdarr
 
@@ -510,12 +381,6 @@ docker exec tdarr ls -la /dev/dri/
 - **Disable unnecessary monitors**: Only monitor critical services
 - **Database maintenance**: Prune old data regularly
 
-### Portainer
-
-- **Limit logged-in sessions**: Logout when not using
-- **Don't poll containers**: Disable auto-refresh
-- **Minimize console usage**: Use SSH for intense operations
-
 ### Tdarr
 
 - **One transcode at a time**: Prevents overload
@@ -531,7 +396,6 @@ docker exec tdarr ls -la /dev/dri/
 | Service | URL |
 |---------|-----|
 | Uptime Kuma | http://homelab-media:3001 |
-| Portainer | https://homelab-media:9443 |
 | Tdarr | http://homelab-media:8265 |
 
 All services accessible only via Tailscale VPN for security.

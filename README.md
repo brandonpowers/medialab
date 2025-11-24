@@ -87,7 +87,7 @@ cd /opt/homelab
 ### Infrastructure
 - **[Network & Remote Access](docs/networking.md)** - Cloudflare Tunnel, Tailscale, security
 - **[Backend Services](docs/backend.md)** - PostgreSQL, Redis
-- **[Monitoring & Management](docs/monitoring.md)** - Uptime Kuma, Portainer, Tdarr
+- **[Monitoring & Management](docs/monitoring.md)** - Uptime Kuma, Tdarr
 
 ### Special Features
 - **Automatic Blu-ray Ripping** - ARM automatically rips and transcodes discs with GPU acceleration
@@ -132,7 +132,7 @@ cd /opt/homelab
 │  │  │                                               │  │  │
 │  │  │  PRIVATE (via Tailscale):                    │  │  │
 │  │  │    *arr apps, Downloads, Tdarr, ARM          │  │  │
-│  │  │    Portainer, Uptime Kuma, OVOS              │  │  │
+│  │  │    Uptime Kuma, OVOS                         │  │  │
 │  │  │                                               │  │  │
 │  │  │  BACKEND: PostgreSQL, Redis                  │  │  │
 │  │  └──────────────────────────────────────────────┘  │  │
@@ -171,7 +171,6 @@ Secure access from **authorized devices only**:
 - **SABnzbd** → http://homelab-media:8085
 - **Tdarr** → http://homelab-media:8265
 - **ARM (Blu-ray Ripper)** → http://homelab-media:8090
-- **Portainer** → https://homelab-media:9443
 - **Uptime Kuma** → http://homelab-media:3001
 - **OVOS GUI** → http://homelab-media:8484 (disabled by default)
 
