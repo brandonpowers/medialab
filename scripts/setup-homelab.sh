@@ -519,14 +519,14 @@ if [[ -z "${!ID_CDROM_MEDIA_*}" ]] ; then
     eval "$(udevadm info --query=env --export "${DEVNAME}")"
 fi
 
-# Determine disc type
-if [ "$ID_CDROM_MEDIA_DVD" == "1" ]; then
+# Determine disc type (use defaults to avoid unbound variable errors)
+if [ "${ID_CDROM_MEDIA_DVD:-0}" == "1" ]; then
     DISC_TYPE="DVD"
-elif [ "$ID_CDROM_MEDIA_BD" == "1" ]; then
+elif [ "${ID_CDROM_MEDIA_BD:-0}" == "1" ]; then
     DISC_TYPE="Blu-ray"
-elif [ "$ID_CDROM_MEDIA_CD" == "1" ] || [ "$ID_CDROM_MEDIA_CD_R" == "1" ] || [ "$ID_CDROM_MEDIA_CD_RW" == "1" ]; then
+elif [ "${ID_CDROM_MEDIA_CD:-0}" == "1" ] || [ "${ID_CDROM_MEDIA_CD_R:-0}" == "1" ] || [ "${ID_CDROM_MEDIA_CD_RW:-0}" == "1" ]; then
     DISC_TYPE="CD"
-elif [ -n "$ID_FS_TYPE" ]; then
+elif [ -n "${ID_FS_TYPE:-}" ]; then
     DISC_TYPE="Data"
 else
     echo "$(date) [ARM] Unknown disc type, exiting" >> /var/log/arm-wrapper.log
