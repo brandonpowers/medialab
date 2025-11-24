@@ -1,6 +1,6 @@
 # Homelab Media Server
 
-A complete, privacy-first media server stack running in an Ubuntu 24.04 LXC on Proxmox. Features automated media management, streaming, secure remote access, and local voice control.
+A complete, privacy-first media server stack running on Ubuntu Server 24.04 LTS. Features automated media management, streaming, secure remote access, and local voice control with a single-script deployment.
 
 ## Overview
 
@@ -16,13 +16,28 @@ A complete, privacy-first media server stack running in an Ubuntu 24.04 LXC on P
 
 ## Quick Start
 
-### Automated Setup (Recommended)
+### Prerequisites
+
+1. **Hardware Requirements:**
+   - Intel CPU with QuickSync GPU (or AMD equivalent)
+   - 16GB+ RAM (24GB recommended)
+   - 100GB+ storage for system
+   - Separate storage for media files
+   - Blu-ray/DVD optical drive (optional, for ARM)
+
+2. **Fresh Ubuntu Server 24.04 LTS Installation**
+   - See **[Ubuntu Installation Guide](docs/ubuntu-installation.md)** for detailed steps
+   - Set static IP: `192.168.8.202` (or your preference)
+   - Enable OpenSSH server during installation
+
+### Automated Deployment
 
 Deploy your entire homelab in 2 commands:
 
 ```bash
-# Clone and enter directory
-git clone https://github.com/brandonpowers/homelab.git /opt/homelab
+# Clone repository (as root or with sudo)
+sudo git clone https://github.com/brandonpowers/homelab.git /opt/homelab
+sudo chown -R $(whoami):$(whoami) /opt/homelab
 cd /opt/homelab
 
 # Run automated setup
@@ -30,48 +45,25 @@ cd /opt/homelab
 ```
 
 **What the script does:**
-- ✅ Checks prerequisites (Docker, Docker Compose, OpenSSL)
-- ✅ Prompts for configuration (timezone, domain, email, etc.)
+- ✅ Installs Docker and Docker Compose
+- ✅ Checks all prerequisites
+- ✅ Prompts for configuration (timezone, domain, email, API keys)
 - ✅ Generates all passwords and security tokens automatically
 - ✅ Creates `.env` configuration file
-- ✅ Sets up all data directories
-- ✅ Validates docker-compose.yml
+- ✅ Sets up all media directories with correct permissions
+- ✅ Configures ARM udev rules for automatic disc ripping
+- ✅ Validates docker-compose.yml syntax
 - ✅ Pulls all Docker images
-- ✅ Starts all services
+- ✅ Starts all 31 services
 - ✅ Waits for postgres/redis to be healthy
-- ✅ Verifies all databases created
+- ✅ Verifies all databases created successfully
 - ✅ Shows service status and access URLs
 
-**Total time:** ~10-20 minutes (mostly downloading images)
+**Total time:** ~15-25 minutes (mostly downloading Docker images)
 
 ### Manual Setup
 
-If you prefer manual setup or need to deploy on Proxmox:
-
-#### 1) On the Proxmox host
-```bash
-cd /root
-git clone https://github.com/<you>/homelab.git
-cd homelab/host
-chmod +x create-ct.sh
-
-# Optional non-interactive password:
-# export CT_PASSWORD='yourStrongPass'
-
-./create-ct.sh   # creates/updates CT (idempotent)
-```
-
-#### 2) Inside the LXC Container
-```bash
-pct enter 101
-cd /opt/homelab
-
-# Run automated setup
-./scripts/setup-homelab.sh
-
-# Optional: Enable auto-start on boot
-./ct/install-service.sh
-```
+If you prefer step-by-step manual configuration, see **[Manual Setup Guide](docs/manual-setup.md)**
 
 ## Service Documentation
 
@@ -119,23 +111,19 @@ cd /opt/homelab
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────┐
-│                  Proxmox VE Host                         │
+│            Ubuntu Server 24.04 LTS (homelab-media)       │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │      Ubuntu 24.04 LXC Container (CT 101)           │  │
+│  │        Docker Compose (31 Services)                │  │
 │  │                                                     │  │
-│  │  ┌──────────────────────────────────────────────┐  │  │
-│  │  │        Docker Compose (31 Services)          │  │  │
-│  │  │                                               │  │  │
-│  │  │  PUBLIC (via Cloudflare):                    │  │  │
-│  │  │    Jellyfin, Jellyseerr, Homarr              │  │  │
-│  │  │    Audiobookshelf, Calibre-Web, Immich       │  │  │
-│  │  │                                               │  │  │
-│  │  │  PRIVATE (via Tailscale):                    │  │  │
-│  │  │    *arr apps, Downloads, Tdarr, ARM          │  │  │
-│  │  │    Uptime Kuma, OVOS                         │  │  │
-│  │  │                                               │  │  │
-│  │  │  BACKEND: PostgreSQL, Redis                  │  │  │
-│  │  └──────────────────────────────────────────────┘  │  │
+│  │  PUBLIC (via Cloudflare):                          │  │
+│  │    Jellyfin, Jellyseerr, Homarr                    │  │
+│  │    Audiobookshelf, Calibre-Web, Immich             │  │
+│  │                                                     │  │
+│  │  PRIVATE (via Tailscale):                          │  │
+│  │    *arr apps, Downloads, Tdarr, ARM                │  │
+│  │    Uptime Kuma, OVOS                               │  │
+│  │                                                     │  │
+│  │  BACKEND: PostgreSQL, Redis                        │  │
 │  └────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────┘
 ```
