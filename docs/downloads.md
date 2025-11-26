@@ -15,7 +15,7 @@ Download clients for torrents and Usenet.
 
 ### Initial Setup
 
-1. **Access:** http://homelab-media:8080 (via Tailscale)
+1. **Access:** http://SERVER_IP:8080 (or via Tailscale)
 
 2. **Default Credentials:**
    ```bash
@@ -113,7 +113,7 @@ You need:
 
 ### Initial Setup
 
-1. **Access:** http://homelab-media:8085 (via Tailscale)
+1. **Access:** http://SERVER_IP:8085 (or via Tailscale)
 
 2. **Setup Wizard:**
    - Select language
@@ -445,9 +445,9 @@ docker compose logs sabnzbd
 
 ## Common Access URLs
 
-| Service | URL |
-|---------|-----|
-| qBittorrent | http://homelab-media:8080 |
-| SABnzbd | http://homelab-media:8085 |
+| Service | LAN URL | Tailscale URL |
+|---------|---------|---------------|
+| qBittorrent | http://SERVER_IP:8080 | http://TAILSCALE_IP:8080 |
+| SABnzbd | http://SERVER_IP:8085 | http://TAILSCALE_IP:8085 |
 
-Both services accessible only via Tailscale VPN for security.
+Both services accessible on your local network or remotely via Tailscale.

@@ -198,71 +198,67 @@ Or just open in browser:
 
 ## Tailscale Setup
 
-Admin services (Sonarr, Radarr, etc.) should **NOT** be publicly accessible. Use Tailscale for secure private access.
+Admin services (Sonarr, Radarr, etc.) should **NOT** be publicly accessible. Use Tailscale for secure private access from anywhere.
 
-### Step 1: Get Auth Key
+Tailscale is installed directly on the Ubuntu host (not as a Docker container) for simplicity and reliability.
 
-1. **Go to:** https://login.tailscale.com/admin/settings/keys
-2. **Click "Generate auth key"**
-3. **Options:**
-   - Reusable: **YES**
-   - Ephemeral: **NO**
-   - Tags: (optional) `tag:homelab`
-4. **Copy the key** (starts with `tskey-auth-...`)
+### Step 1: Install Tailscale
 
-### Step 2: Add to `.env` file
+The setup script (`scripts/setup-homelab.sh`) will offer to install Tailscale automatically. To install manually:
 
 ```bash
-nano .env
+# Install Tailscale
+curl -fsSL https://tailscale.com/install.sh | sh
+
+# Connect to your Tailscale network
+sudo tailscale up --hostname=homelab
 ```
 
-Add:
-```bash
-TAILSCALE_AUTH_KEY=tskey-auth-xxxxxxxxxxxxx-yyyyyyyyyyyyyyyy
-```
+A browser window will open for authentication. Log in with your Tailscale account.
 
-### Step 3: Restart stack
-
-```bash
-docker compose up -d
-```
-
-### Step 4: Verify Tailscale
+### Step 2: Verify Connection
 
 ```bash
-docker compose logs tailscale
+# Check status
+tailscale status
+
+# Get your Tailscale IP
+tailscale ip -4
+# Example output: 100.101.102.103
 ```
 
-Check Tailscale admin:
+Check the Tailscale admin console:
 - Go to: https://login.tailscale.com/admin/machines
-- You should see: `homelab-media`
+- You should see: `homelab`
 
-### Step 5: Access Admin Services
+### Step 3: Install Tailscale on Your Devices
 
 1. **Install Tailscale on your devices:**
    - **Mac/PC:** https://tailscale.com/download
    - **iOS/Android:** App store
 
-2. **Log in with same account**
+2. **Log in with the same Tailscale account**
 
-3. **Get Tailscale IP:**
-   ```bash
-   docker compose exec tailscale tailscale ip
-   # Example: 100.101.102.103
+3. **Access admin services via Tailscale IP:**
+   ```
+   Sonarr:       http://<tailscale-ip>:8989
+   Radarr:       http://<tailscale-ip>:7878
+   Lidarr:       http://<tailscale-ip>:8686
+   Prowlarr:     http://<tailscale-ip>:9696
+   Bazarr:       http://<tailscale-ip>:6767
+   qBittorrent:  http://<tailscale-ip>:8080
+   SABnzbd:      http://<tailscale-ip>:8085
+   Tdarr:        http://<tailscale-ip>:8265
+   Uptime Kuma:  http://<tailscale-ip>:3001
+   ARM:          http://<tailscale-ip>:8090
    ```
 
-4. **Access admin services via Tailscale:**
-   - Sonarr: `http://homelab-media:8989` or `http://100.101.102.103:8989`
-   - Radarr: `http://homelab-media:7878`
-   - Lidarr: `http://homelab-media:8686`
-   - Readarr: `http://homelab-media:8787`
-   - Prowlarr: `http://homelab-media:9696`
-   - Bazarr: `http://homelab-media:6767`
-   - qBittorrent: `http://homelab-media:8080`
-   - SABnzbd: `http://homelab-media:8085`
-   - Tdarr: `http://homelab-media:8265`
-   - Uptime Kuma: `http://homelab-media:3001`
-   - OVOS GUI: `http://homelab-media:8484`
+### Optional: Use MagicDNS
+
+Enable MagicDNS in Tailscale admin to access services by hostname:
+- Go to: https://login.tailscale.com/admin/dns
+- Enable MagicDNS
+- Access services at: `http://homelab:PORT`
 
 ---
 
@@ -328,14 +324,24 @@ docker compose restart cloudflared
 
 **Can't access admin services via Tailscale:**
 ```bash
-# Check Tailscale is running
-docker compose ps tailscale
+# Check Tailscale is running on the host
+tailscale status
 
 # Get Tailscale IP
-docker compose exec tailscale tailscale status
+tailscale ip -4
 
-# Verify on other device:
-tailscale status  # Should show homelab-media
+# Restart Tailscale if needed
+sudo systemctl restart tailscaled
+
+# Re-authenticate if disconnected
+sudo tailscale up --hostname=homelab
+```
+
+**Tailscale not installed:**
+```bash
+# Install Tailscale
+curl -fsSL https://tailscale.com/install.sh | sh
+sudo tailscale up --hostname=homelab
 ```
 
 ## Architecture
@@ -346,7 +352,7 @@ tailscale status  # Should show homelab-media
 └──────────────┬─────────────────────────┬──────────────────┘
                │                         │
                │ Public Services         │ Admin Access
-               │ (*.yourdomain.com)     │ (Authorized only)
+               │ (*.yourdomain.com)      │ (Authorized only)
                ▼                         ▼
      ┌──────────────────┐      ┌──────────────────┐
      │  Cloudflare Edge │      │  Tailscale VPN   │
@@ -357,27 +363,28 @@ tailscale status  # Should show homelab-media
               │ (No ports open)         │
               ▼                         ▼
 ┌──────────────────────────────────────────────────────────┐
-│                 GL-AX1800 Router                         │
-│              (WireGuard via ProtonVPN)                   │
+│                     Home Router                          │
 └────────────────────────┬─────────────────────────────────┘
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────┐
-│                  Proxmox VE Host                         │
+│              Ubuntu Server (192.168.8.200)               │
+│                                                          │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │      Ubuntu 24.04 LXC Container (CT 101)           │  │
-│  │                                                     │  │
-│  │  ┌──────────────────────────────────────────────┐  │  │
-│  │  │        Docker Compose (31 Services)          │  │  │
-│  │  │                                               │  │  │
-│  │  │  PUBLIC (via Cloudflare):                    │  │  │
-│  │  │    Jellyfin, Jellyseerr, Homarr              │  │  │
-│  │  │    Audiobookshelf, Calibre-Web, Immich       │  │  │
-│  │  │                                               │  │  │
-│  │  │  PRIVATE (via Tailscale):                    │  │  │
-│  │  │    *arr apps, Downloads, Tdarr               │  │  │
-│  │  │    Uptime Kuma, OVOS                         │  │  │
-│  │  └──────────────────────────────────────────────┘  │  │
+│  │  Tailscale (host-level VPN)                        │  │
+│  │  - Provides remote access to all services          │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │        Docker Compose Services                     │  │
+│  │                                                    │  │
+│  │  PUBLIC (via Cloudflare):                          │  │
+│  │    Jellyfin, Jellyseerr, Homarr                    │  │
+│  │    Audiobookshelf, Calibre-Web, Immich             │  │
+│  │                                                    │  │
+│  │  PRIVATE (via Tailscale or LAN):                   │  │
+│  │    *arr apps, Downloads, Tdarr                     │  │
+│  │    Uptime Kuma, ARM, OVOS                          │  │
 │  └────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────┘
 ```
@@ -386,5 +393,6 @@ tailscale status  # Should show homelab-media
 1. **Home IP never exposed** - Cloudflare Tunnel creates outbound connection only
 2. **No ports opened** - Router firewall remains locked down
 3. **Public services** - Routed through Cloudflare (DDoS protected, SSL at edge)
-4. **Admin services** - Only accessible via Tailscale (zero-trust encrypted mesh)
-5. **Local access** - All services still available on home network via IP:PORT
+4. **Admin services** - Accessible via LAN or Tailscale (zero-trust encrypted mesh)
+5. **Local access** - All services available on home network via `192.168.8.200:PORT`
+6. **Remote access** - All services available via Tailscale IP

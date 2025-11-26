@@ -1,39 +1,42 @@
 # Backend Services
 
-Shared database and caching services used by multiple applications.
+Database and caching services for Immich photo management.
 
 ## Services Overview
 
 | Service | Purpose | Used By | Port |
 |---------|---------|---------|------|
-| **PostgreSQL** | Relational database | Immich | 5432 |
-| **Redis** | In-memory cache | Immich | 6379 |
+| **PostgreSQL** | Relational database | Immich only | 5432 |
+| **Redis** | In-memory cache | Immich only | 6379 |
 
 **Note:** Ports are not exposed externally - internal Docker network only.
 
+**Other Services:** Jellyseerr, Uptime Kuma, and all *arr apps use internal SQLite databases.
+
 ---
 
-## PostgreSQL - Shared Database
+## PostgreSQL - Database for Immich
 
-PostgreSQL provides reliable, production-ready database for multiple services.
+PostgreSQL provides reliable, production-ready database specifically for Immich photo management.
 
-### Features
+### Why PostgreSQL for Immich?
 
-- **Shared database server** for multiple applications
-- **Automatic database creation** via init script
-- **Vector extension** (pgvecto-rs) for Immich ML features
-- **Health checks** ensure services wait for database
-- **Persistent storage** via Docker volume
+- **Required dependency** - Immich requires PostgreSQL (SQLite not supported)
+- **Vector extension** (pgvecto-rs) - Enables AI/ML features like face recognition and smart search
+- **Performance** - Optimized for large photo libraries (thousands of photos)
+- **Reliability** - ACID compliance and data integrity for your memories
+- **Health checks** - Ensures Immich waits for database to be ready
+- **Persistent storage** - Data survives container restarts via Docker volume
 
 ### Databases
 
-The following databases are automatically created:
+Currently only one database is used:
 
 | Database | Used By | Purpose |
 |----------|---------|---------|
-| `immich` | Immich | Photo metadata, users, albums |
+| `immich` | Immich | Photo metadata, AI embeddings, face recognition, albums, sharing |
 
-**Note:** Jellyseerr and Uptime Kuma use their own internal SQLite databases for simplicity.
+**Scalability Note:** The PostgreSQL container can support additional services in the future if needed.
 
 ### Configuration
 
@@ -395,24 +398,29 @@ docker exec redis redis-cli MONITOR
 
 ---
 
-## Database Creation Script
+## Database Initialization Script
 
-The `create-multiple-postgres-databases.sh` script automatically creates all required databases on first PostgreSQL startup.
+The `init-immich-database.sh` script automatically sets up the Immich database on first PostgreSQL startup.
 
-**Script Location:** `scripts/create-multiple-postgres-databases.sh`
+**Script Location:** `scripts/init-immich-database.sh`
 
-**How It Works:**
-1. Reads `POSTGRES_MULTIPLE_DATABASES` env var
-2. Creates each database if it doesn't exist
-3. Runs on container first start (docker-entrypoint-initdb.d)
+**What it does:**
+1. Creates the `immich` database
+2. Grants all privileges to the homelab user
+3. Enables the `vectors` extension (pgvecto-rs) for AI/ML features
 
-**Manual Database Creation:**
+**The script runs automatically** when PostgreSQL container starts for the first time (via `/docker-entrypoint-initdb.d/`).
+
+**Manual Database Operations:**
 ```bash
-# Create new database
-docker exec postgres createdb -U homelab newdatabase
+# Connect to Immich database
+docker exec -it postgres psql -U homelab -d immich
 
-# Grant permissions
-docker exec postgres psql -U homelab -c "GRANT ALL PRIVILEGES ON DATABASE newdatabase TO homelab;"
+# Check if vector extension is enabled
+docker exec postgres psql -U homelab -d immich -c '\dx'
+
+# Manual extension enable (if needed)
+docker exec postgres psql -U homelab -d immich -c "CREATE EXTENSION IF NOT EXISTS vectors;"
 ```
 
 ---

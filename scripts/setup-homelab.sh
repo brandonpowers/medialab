@@ -45,6 +45,308 @@ generate_password() {
     openssl rand -base64 32
 }
 
+# Display available drives and let user select one for media storage
+select_media_drive() {
+    print_section "Media Drive Selection"
+
+    print_info "Scanning for available drives..."
+    echo ""
+
+    # Get list of block devices (excluding loop, ram, and partitions)
+    # Show: NAME, SIZE, TYPE, MOUNTPOINT, MODEL
+    local drives=()
+    local drive_info=()
+    local i=1
+
+    # Read drives into array
+    while IFS= read -r line; do
+        local name=$(echo "$line" | awk '{print $1}')
+        local size=$(echo "$line" | awk '{print $2}')
+        local type=$(echo "$line" | awk '{print $3}')
+        local mountpoint=$(echo "$line" | awk '{print $4}')
+        local model=$(echo "$line" | awk '{for(i=5;i<=NF;i++) printf $i" "; print ""}' | xargs)
+
+        # Skip if it's the boot/root drive
+        if [ "$mountpoint" == "/" ] || [ "$mountpoint" == "/boot" ] || [ "$mountpoint" == "/boot/efi" ]; then
+            continue
+        fi
+
+        drives+=("$name")
+        drive_info+=("$size|$type|$mountpoint|$model")
+    done < <(lsblk -d -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL -n | grep -E "^(sd|nvme|vd)" | grep -v "loop")
+
+    if [ ${#drives[@]} -eq 0 ]; then
+        print_warning "No additional drives found"
+        print_info "Using default media path: /mnt/media"
+        SELECTED_MEDIA_PATH="/mnt/media"
+        return
+    fi
+
+    echo -e "${BLUE}Available drives:${NC}"
+    echo ""
+    printf "  %-4s %-12s %-10s %-8s %-20s %s\n" "#" "DEVICE" "SIZE" "TYPE" "MOUNTPOINT" "MODEL"
+    echo "  ─────────────────────────────────────────────────────────────────────────────"
+
+    for idx in "${!drives[@]}"; do
+        local name="${drives[$idx]}"
+        IFS='|' read -r size type mountpoint model <<< "${drive_info[$idx]}"
+        mountpoint=${mountpoint:-"(not mounted)"}
+        model=${model:-"Unknown"}
+        printf "  %-4s %-12s %-10s %-8s %-20s %s\n" "[$((idx+1))]" "/dev/$name" "$size" "$type" "$mountpoint" "$model"
+    done
+
+    echo ""
+    printf "  %-4s %-12s\n" "[S]" "Skip - use default path (/mnt/media)"
+    echo ""
+
+    # Get user selection
+    while true; do
+        echo -n "Select a drive for media storage (1-${#drives[@]} or S to skip): "
+        read -r selection
+
+        if [[ "$selection" =~ ^[Ss]$ ]]; then
+            print_info "Using default media path: /mnt/media"
+            SELECTED_MEDIA_PATH="/mnt/media"
+            return
+        fi
+
+        if [[ "$selection" =~ ^[0-9]+$ ]] && [ "$selection" -ge 1 ] && [ "$selection" -le "${#drives[@]}" ]; then
+            local selected_drive="${drives[$((selection-1))]}"
+            local selected_info="${drive_info[$((selection-1))]}"
+            IFS='|' read -r size type mountpoint model <<< "$selected_info"
+
+            echo ""
+            print_info "Selected: /dev/$selected_drive ($size - $model)"
+
+            setup_media_drive "/dev/$selected_drive" "$mountpoint"
+            return
+        fi
+
+        print_error "Invalid selection. Please enter a number between 1 and ${#drives[@]}, or S to skip."
+    done
+}
+
+# Setup the selected media drive (format if needed, mount)
+setup_media_drive() {
+    local device="$1"
+    local current_mount="$2"
+    local mount_point="/mnt/media"
+
+    # Check if drive is already mounted
+    if [ -n "$current_mount" ] && [ "$current_mount" != "(not mounted)" ]; then
+        print_info "Drive is already mounted at: $current_mount"
+        echo -n "Use existing mount point '$current_mount'? (Y/n): "
+        read -r response
+        if [[ ! "$response" =~ ^[Nn]$ ]]; then
+            SELECTED_MEDIA_PATH="$current_mount"
+            print_success "Using existing mount: $SELECTED_MEDIA_PATH"
+            create_media_structure "$SELECTED_MEDIA_PATH"
+            return
+        fi
+    fi
+
+    # Check for existing partitions
+    local partitions=$(lsblk -n -o NAME "$device" | tail -n +2)
+    local partition_to_use=""
+
+    if [ -n "$partitions" ]; then
+        print_info "Drive has existing partitions:"
+        lsblk -o NAME,SIZE,FSTYPE,LABEL "$device"
+        echo ""
+
+        echo "Options:"
+        echo "  [1] Use existing partition (select which one)"
+        echo "  [2] Format entire drive (WARNING: ERASES ALL DATA)"
+        echo "  [3] Cancel and use default path"
+        echo ""
+        echo -n "Select option (1-3): "
+        read -r format_choice
+
+        case "$format_choice" in
+            1)
+                # List partitions for selection
+                local part_list=()
+                while IFS= read -r part; do
+                    part_list+=("$part")
+                done < <(lsblk -n -o NAME "$device" | tail -n +2)
+
+                if [ ${#part_list[@]} -eq 1 ]; then
+                    partition_to_use="/dev/${part_list[0]}"
+                    print_info "Using partition: $partition_to_use"
+                else
+                    echo ""
+                    echo "Available partitions:"
+                    for idx in "${!part_list[@]}"; do
+                        local part_info=$(lsblk -n -o NAME,SIZE,FSTYPE,LABEL "/dev/${part_list[$idx]}" 2>/dev/null | head -1)
+                        echo "  [$((idx+1))] /dev/${part_list[$idx]} - $part_info"
+                    done
+                    echo ""
+                    echo -n "Select partition (1-${#part_list[@]}): "
+                    read -r part_sel
+
+                    if [[ "$part_sel" =~ ^[0-9]+$ ]] && [ "$part_sel" -ge 1 ] && [ "$part_sel" -le "${#part_list[@]}" ]; then
+                        partition_to_use="/dev/${part_list[$((part_sel-1))]}"
+                    else
+                        print_error "Invalid selection"
+                        SELECTED_MEDIA_PATH="/mnt/media"
+                        return
+                    fi
+                fi
+                ;;
+            2)
+                format_drive "$device"
+                partition_to_use="${device}1"
+                # Handle NVMe naming convention
+                if [[ "$device" == *"nvme"* ]]; then
+                    partition_to_use="${device}p1"
+                fi
+                ;;
+            *)
+                print_info "Using default media path: /mnt/media"
+                SELECTED_MEDIA_PATH="/mnt/media"
+                return
+                ;;
+        esac
+    else
+        # No partitions - need to format
+        print_warning "Drive has no partitions"
+        echo -n "Format the drive? (y/N): "
+        read -r response
+        if [[ "$response" =~ ^[Yy]$ ]]; then
+            format_drive "$device"
+            partition_to_use="${device}1"
+            if [[ "$device" == *"nvme"* ]]; then
+                partition_to_use="${device}p1"
+            fi
+        else
+            print_info "Using default media path: /mnt/media"
+            SELECTED_MEDIA_PATH="/mnt/media"
+            return
+        fi
+    fi
+
+    # Mount the partition
+    mount_partition "$partition_to_use" "$mount_point"
+}
+
+# Format a drive with a single ext4 partition
+format_drive() {
+    local device="$1"
+
+    print_warning "This will ERASE ALL DATA on $device!"
+    echo -n "Type 'YES' to confirm: "
+    read -r confirm
+
+    if [ "$confirm" != "YES" ]; then
+        print_info "Format cancelled"
+        SELECTED_MEDIA_PATH="/mnt/media"
+        return 1
+    fi
+
+    print_info "Formatting $device..."
+
+    # Unmount any mounted partitions
+    for part in $(lsblk -n -o NAME "$device" | tail -n +2); do
+        umount "/dev/$part" 2>/dev/null || true
+    done
+
+    # Create new GPT partition table and single partition
+    print_info "Creating partition table..."
+    parted -s "$device" mklabel gpt
+    parted -s "$device" mkpart primary ext4 0% 100%
+
+    # Wait for partition to appear
+    sleep 2
+
+    # Determine partition name
+    local partition="${device}1"
+    if [[ "$device" == *"nvme"* ]]; then
+        partition="${device}p1"
+    fi
+
+    # Format as ext4
+    print_info "Formatting partition as ext4..."
+    mkfs.ext4 -F -L "media" "$partition"
+
+    print_success "Drive formatted successfully"
+}
+
+# Mount a partition
+mount_partition() {
+    local partition="$1"
+    local mount_point="$2"
+
+    print_info "Mounting $partition to $mount_point..."
+
+    # Create mount point if needed
+    if [ ! -d "$mount_point" ]; then
+        mkdir -p "$mount_point"
+    fi
+
+    # Check if already mounted elsewhere
+    local current_mount=$(findmnt -n -o TARGET "$partition" 2>/dev/null)
+    if [ -n "$current_mount" ]; then
+        print_info "Partition already mounted at $current_mount"
+        SELECTED_MEDIA_PATH="$current_mount"
+        create_media_structure "$SELECTED_MEDIA_PATH"
+        return
+    fi
+
+    # Mount the partition
+    mount "$partition" "$mount_point"
+
+    # Get UUID for fstab entry
+    local uuid=$(blkid -s UUID -o value "$partition")
+
+    # Add to fstab if not already present
+    if ! grep -q "$uuid" /etc/fstab; then
+        print_info "Adding mount to /etc/fstab for persistence..."
+        echo "UUID=$uuid $mount_point ext4 defaults,nofail 0 2" >> /etc/fstab
+        print_success "Added to /etc/fstab"
+    else
+        print_info "Mount already in /etc/fstab"
+    fi
+
+    SELECTED_MEDIA_PATH="$mount_point"
+    print_success "Mounted at $SELECTED_MEDIA_PATH"
+
+    create_media_structure "$SELECTED_MEDIA_PATH"
+}
+
+# Create media directory structure
+create_media_structure() {
+    local media_path="$1"
+
+    print_info "Creating media directory structure..."
+
+    local media_dirs=(
+        "movies"
+        "tv"
+        "music"
+        "books"
+        "audiobooks"
+        "podcasts"
+        "photos"
+        "downloads/complete"
+        "downloads/incomplete"
+        "downloads/watch"
+        "transcode"
+    )
+
+    for dir in "${media_dirs[@]}"; do
+        if [ ! -d "$media_path/$dir" ]; then
+            mkdir -p "$media_path/$dir"
+            print_success "Created $media_path/$dir"
+        else
+            print_info "Already exists: $media_path/$dir"
+        fi
+    done
+
+    # Set ownership
+    chown -R ${PUID:-1000}:${PGID:-1000} "$media_path"
+    print_success "Media directory structure ready"
+}
+
 # Check if running in correct directory
 check_directory() {
     if [ ! -f "docker-compose.yml" ]; then
@@ -117,15 +419,6 @@ configure_docker_daemon() {
   }
 }
 DOCKEREOF
-
-    # Configure Docker for LXC environment (disables AppArmor integration)
-    print_info "Configuring Docker systemd service for LXC environment..."
-    mkdir -p /etc/systemd/system/docker.service.d
-
-    cat > /etc/systemd/system/docker.service.d/lxc-environment.conf <<'SYSTEMDEOF'
-[Service]
-Environment="container=lxc"
-SYSTEMDEOF
 
     # Reload systemd and restart Docker to apply changes
     systemctl daemon-reload
@@ -214,36 +507,97 @@ generate_env() {
     read -r TZ
     TZ=${TZ:-America/Chicago}
 
-    echo -n "PUID (default: 1000): "
-    read -r PUID
-    PUID=${PUID:-1000}
+    # Auto-detect PUID and PGID from the user running sudo
+    if [ -n "${SUDO_USER:-}" ]; then
+        PUID=$(id -u "$SUDO_USER")
+        PGID=$(id -g "$SUDO_USER")
+        print_success "Auto-detected PUID=$PUID, PGID=$PGID (from user: $SUDO_USER)"
+    else
+        PUID=$(id -u)
+        PGID=$(id -g)
+        print_success "Auto-detected PUID=$PUID, PGID=$PGID"
+    fi
 
-    echo -n "PGID (default: 1000): "
-    read -r PGID
-    PGID=${PGID:-1000}
+    # Use the selected media path from drive selection, or prompt for manual entry
+    if [ -n "${SELECTED_MEDIA_PATH:-}" ]; then
+        MEDIA_ROOT="$SELECTED_MEDIA_PATH"
+        print_info "Using selected media path: $MEDIA_ROOT"
+    else
+        echo -n "Media root path (default: /mnt/media): "
+        read -r MEDIA_ROOT
+        MEDIA_ROOT=${MEDIA_ROOT:-/mnt/media}
+    fi
 
-    echo -n "Media root path (default: /mnt/media): "
-    read -r MEDIA_ROOT
-    MEDIA_ROOT=${MEDIA_ROOT:-/mnt/media}
-
-    echo -n "Domain name (default: glaance.io): "
-    read -r DOMAIN
-    DOMAIN=${DOMAIN:-glaance.io}
-
-    echo -n "Your email: "
+    echo -n "Your email address: "
     read -r EMAIL
+    if [ -z "$EMAIL" ]; then
+        print_warning "No email provided - some services may require this later"
+        EMAIL=""
+    fi
 
-    echo -n "Cloudflare Tunnel Token (press Enter to skip for now): "
-    read -r CLOUDFLARE_TUNNEL_TOKEN
-    CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-your_tunnel_token_here}
+    # Ask about Cloudflare Tunnel for public access
+    echo ""
+    echo -n "Do you want to set up a domain with Cloudflare Tunnel for public access? (y/N): "
+    read -r USE_CLOUDFLARE
 
-    echo -n "Tailscale Auth Key (press Enter to skip for now): "
-    read -r TAILSCALE_AUTH_KEY
-    TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY:-tskey-auth-xxxxxxxxxxxxx}
+    if [[ "$USE_CLOUDFLARE" =~ ^[Yy]$ ]]; then
+        echo -n "Domain name: "
+        read -r DOMAIN
 
-    echo -n "TMDB API Key (press Enter to skip for now): "
+        echo ""
+        print_info "To get your Cloudflare Tunnel token:"
+        echo "  1. Go to: https://one.dash.cloudflare.com/"
+        echo "  2. Navigate to: Zero Trust → Networks → Tunnels"
+        echo "  3. Create a tunnel and copy the token"
+        echo ""
+        echo -n "Cloudflare Tunnel Token: "
+        read -r CLOUDFLARE_TUNNEL_TOKEN
+
+        if [ -z "$CLOUDFLARE_TUNNEL_TOKEN" ]; then
+            print_warning "No token provided - you can add it to .env later"
+            CLOUDFLARE_TUNNEL_TOKEN="your_tunnel_token_here"
+        fi
+    else
+        print_info "Skipping Cloudflare Tunnel setup"
+        print_info "Services will only be accessible on your local network (and via Tailscale)"
+        DOMAIN=""
+        CLOUDFLARE_TUNNEL_TOKEN=""
+    fi
+
+
+    echo ""
+    print_info "TMDB API Key is used by Jellyseerr for media discovery"
+    echo "  Get one free at: https://www.themoviedb.org/settings/api"
+    echo ""
+    echo -n "TMDB API Key (press Enter to skip): "
     read -r TMDB_API_KEY
-    TMDB_API_KEY=${TMDB_API_KEY:-your_tmdb_api_key_here}
+    if [ -z "$TMDB_API_KEY" ]; then
+        print_warning "No TMDB key - Jellyseerr will need this configured later"
+        TMDB_API_KEY=""
+    fi
+
+    # Optional features
+    print_section "Optional Features"
+
+    echo -n "Enable audiobook/ebook support? (Audiobookshelf + Calibre-Web) (Y/n): "
+    read -r USE_BOOKS
+    if [[ "$USE_BOOKS" =~ ^[Nn]$ ]]; then
+        ENABLE_BOOKS=false
+        print_info "Audiobook/ebook services disabled"
+    else
+        ENABLE_BOOKS=true
+        print_success "Audiobook/ebook services enabled"
+    fi
+
+    echo -n "Enable Open Voice OS? (Local voice assistant) (y/N): "
+    read -r USE_OVOS
+    if [[ "$USE_OVOS" =~ ^[Yy]$ ]]; then
+        ENABLE_OVOS=true
+        print_success "Open Voice OS enabled"
+    else
+        ENABLE_OVOS=false
+        print_info "Open Voice OS disabled"
+    fi
 
     # Create .env file
     cat > .env << EOF
@@ -257,14 +611,7 @@ TZ=${TZ}
 PUID=${PUID}
 PGID=${PGID}
 MEDIA_ROOT=${MEDIA_ROOT}
-
-# Domain Configuration
-DOMAIN=${DOMAIN}
 EMAIL=${EMAIL}
-
-# Remote Access
-CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-TAILSCALE_AUTH_KEY=${TAILSCALE_AUTH_KEY}
 
 # Database & Cache (Auto-generated)
 DB_USER=homelab
@@ -280,7 +627,27 @@ TMDB_API_KEY=${TMDB_API_KEY}
 # Recyclarr API Keys (configure after services are running)
 SONARR_API_KEY=your_sonarr_api_key_here
 RADARR_API_KEY=your_radarr_api_key_here
+
+# SABnzbd API Key (optional - configure after SABnzbd is set up)
+SABNZBD_API_KEY=
 EOF
+
+    # Add Cloudflare section if configured
+    if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ] && [ "$CLOUDFLARE_TUNNEL_TOKEN" != "your_tunnel_token_here" ]; then
+        cat >> .env << EOF
+
+# Cloudflare Tunnel (Public Access)
+DOMAIN=${DOMAIN}
+CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+EOF
+    elif [ -n "$DOMAIN" ]; then
+        cat >> .env << EOF
+
+# Cloudflare Tunnel (Not configured - add token to enable)
+DOMAIN=${DOMAIN}
+CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-your_tunnel_token_here}
+EOF
+    fi
 
     print_success ".env file created successfully"
 
@@ -300,6 +667,78 @@ EOF
 
     print_success "Passwords saved to .passwords.txt (chmod 600)"
     print_warning "Store these passwords securely and delete .passwords.txt when done"
+
+    # Create/update docker-compose.override.yml for disabled services
+    create_compose_override
+}
+
+# Create docker-compose.override.yml to disable unused services
+create_compose_override() {
+    print_info "Configuring service profiles..."
+
+    cat > docker-compose.override.yml << 'EOF'
+# Auto-generated by setup-homelab.sh
+# This file disables optional services using Docker Compose profiles
+# Services with profiles won't start unless explicitly enabled
+# Re-run setup-homelab.sh or edit this file to change enabled services
+
+services:
+EOF
+
+    # Disable Cloudflare if not configured
+    if [ -z "$CLOUDFLARE_TUNNEL_TOKEN" ] || [ "$CLOUDFLARE_TUNNEL_TOKEN" = "your_tunnel_token_here" ]; then
+        cat >> docker-compose.override.yml << 'EOF'
+  # Cloudflare Tunnel - disabled (not configured)
+  # To enable: add CLOUDFLARE_TUNNEL_TOKEN to .env and remove this section
+  cloudflared:
+    profiles: ["cloudflare"]
+EOF
+        print_info "Cloudflare Tunnel: disabled"
+    else
+        print_success "Cloudflare Tunnel: enabled"
+    fi
+
+    # Disable books services if not wanted
+    if [ "$ENABLE_BOOKS" = false ]; then
+        cat >> docker-compose.override.yml << 'EOF'
+
+  # Audiobook/Ebook services - disabled
+  # To enable: remove this section and restart
+  audiobookshelf:
+    profiles: ["books"]
+  calibre-web:
+    profiles: ["books"]
+EOF
+        print_info "Audiobooks/Ebooks: disabled"
+    else
+        print_success "Audiobooks/Ebooks: enabled"
+    fi
+
+    # Disable OVOS if not wanted
+    if [ "$ENABLE_OVOS" = false ]; then
+        cat >> docker-compose.override.yml << 'EOF'
+
+  # OVOS (Open Voice OS) - disabled
+  # To enable: docker compose --profile ovos up -d
+  ovos-messagebus:
+    profiles: ["ovos"]
+  ovos-phal:
+    profiles: ["ovos"]
+  ovos-audio:
+    profiles: ["ovos"]
+  ovos-listener:
+    profiles: ["ovos"]
+  ovos-core:
+    profiles: ["ovos"]
+  ovos-gui:
+    profiles: ["ovos"]
+EOF
+        print_info "Open Voice OS: disabled"
+    else
+        print_success "Open Voice OS: enabled"
+    fi
+
+    print_success "docker-compose.override.yml created"
 }
 
 # Create data directories
@@ -307,8 +746,7 @@ create_directories() {
     print_section "Creating Data Directories"
 
     local dirs=(
-        "data/homarr/configs"
-        "data/homarr/icons"
+        "data/homarr/appdata"
         "data/jellyfin/config"
         "data/jellyfin/cache"
         "data/jellyseerr/config"
@@ -326,12 +764,12 @@ create_directories() {
         "data/tdarr/server"
         "data/tdarr/configs"
         "data/tdarr/logs"
+        "data/tdarr/temp"
         "data/arm/config"
         "data/arm/db"
         "data/arm/logs"
         "data/arm/media"
         "data/immich"
-        "data/tailscale"
         "data/ovos/config/phal"
         "data/ovos/share"
         "data/ovos/tmp"
@@ -364,6 +802,11 @@ create_directories() {
 
 # Setup Open Voice OS configuration
 setup_ovos() {
+    # Skip if OVOS is disabled
+    if [ "$ENABLE_OVOS" = false ]; then
+        return
+    fi
+
     print_section "Setting Up Open Voice OS"
 
     # Create OVOS config file if it doesn't exist
@@ -418,8 +861,8 @@ EOFCONF
         print_success "Audio devices found at /dev/snd"
     else
         print_warning "Audio devices not found at /dev/snd"
-        print_warning "OVOS audio services may not work without audio device passthrough"
-        print_info "On Proxmox host, run: pct set <CTID> -dev0 /dev/snd,/dev/snd"
+        print_warning "OVOS audio services may not work without audio device access"
+        print_info "Ensure your user has access to audio devices"
     fi
 
     # Check if user is in audio group (idempotent)
@@ -466,6 +909,66 @@ EOFCONF
     fi
 }
 
+# Install Tailscale on the host for remote access
+setup_tailscale() {
+    print_section "Setting Up Tailscale"
+
+    # Check if Tailscale is already installed
+    if command -v tailscale &> /dev/null; then
+        print_success "Tailscale is already installed"
+        local ts_status=$(tailscale status --json 2>/dev/null | grep -o '"BackendState":"[^"]*"' | cut -d'"' -f4)
+        if [ "$ts_status" == "Running" ]; then
+            print_success "Tailscale is connected"
+            tailscale status | head -5
+        else
+            print_info "Tailscale is installed but not connected"
+            echo -n "Connect to Tailscale now? (Y/n): "
+            read -r response
+            if [[ ! "$response" =~ ^[Nn]$ ]]; then
+                print_info "Starting Tailscale authentication..."
+                tailscale up --hostname=homelab
+                print_success "Tailscale connected"
+            fi
+        fi
+        return
+    fi
+
+    echo -n "Install Tailscale for remote access? (Y/n): "
+    read -r response
+    if [[ "$response" =~ ^[Nn]$ ]]; then
+        print_info "Skipping Tailscale installation"
+        return
+    fi
+
+    print_info "Installing Tailscale..."
+
+    # Install using official script
+    curl -fsSL https://tailscale.com/install.sh | sh
+
+    if command -v tailscale &> /dev/null; then
+        print_success "Tailscale installed successfully"
+
+        # Enable and start the service
+        systemctl enable --now tailscaled
+
+        print_info "Starting Tailscale authentication..."
+        print_info "A browser window will open for authentication."
+        echo ""
+
+        # Start Tailscale with a hostname
+        tailscale up --hostname=homelab
+
+        print_success "Tailscale is now running"
+        print_info "Your Tailscale IP:"
+        tailscale ip -4
+        echo ""
+        print_info "Access services remotely at: http://$(tailscale ip -4):PORT"
+    else
+        print_error "Tailscale installation failed"
+        print_info "You can install manually later: https://tailscale.com/download/linux"
+    fi
+}
+
 # Setup ARM (Automatic Ripping Machine) udev auto-detection
 setup_arm_udev() {
     print_section "Setting Up ARM Automatic Disc Detection"
@@ -496,7 +999,16 @@ set -euo pipefail
 
 DEVNAME="$1"
 CONTAINER_NAME="arm"
-HOMELAB_DIR="/opt/homelab"
+
+# Find homelab directory - check common locations
+if [ -f "/home/*/homelab/docker-compose.yml" ]; then
+    HOMELAB_DIR=$(dirname $(ls /home/*/homelab/docker-compose.yml 2>/dev/null | head -1))
+elif [ -f "/opt/homelab/docker-compose.yml" ]; then
+    HOMELAB_DIR="/opt/homelab"
+else
+    echo "$(date) [ARM] Could not find homelab directory" >> /var/log/arm-wrapper.log
+    exit 1
+fi
 
 # Wait for disc to be fully readable
 sleep 5
@@ -563,13 +1075,13 @@ UDEV_EOF
 
     print_success "Udev rule created at /etc/udev/rules.d/99-arm-docker.rules"
 
-    # Reload udev rules (may fail in LXC containers - that's okay)
+    # Reload udev rules
     print_info "Reloading udev rules..."
     if sudo udevadm control --reload 2>/dev/null; then
         print_success "Udev rules reloaded"
     else
-        print_warning "Could not reload udev (expected in LXC containers)"
-        print_info "Udev rules will be active after container restart or disc insertion"
+        print_warning "Could not reload udev rules"
+        print_info "Udev rules will be active after reboot or manual reload"
     fi
 
     print_success "ARM automatic disc detection configured!"
@@ -595,6 +1107,9 @@ pull_images() {
     print_section "Pulling Docker Images"
 
     print_info "This may take several minutes depending on your internet connection..."
+
+    # Set longer timeout for slow connections
+    export COMPOSE_HTTP_TIMEOUT=120
 
     if docker compose pull; then
         print_success "All images pulled successfully"
@@ -693,27 +1208,73 @@ show_status() {
 show_access_info() {
     print_section "Access Information"
 
-    echo -e "${GREEN}Public Services (via Cloudflare Tunnel):${NC}"
-    echo "  Homarr:         https://homarr.${DOMAIN:-glaance.io}"
-    echo "  Jellyfin:       https://jellyfin.${DOMAIN:-glaance.io}"
-    echo "  Jellyseerr:     https://jellyseerr.${DOMAIN:-glaance.io}"
-    echo "  Immich:         https://photos.${DOMAIN:-glaance.io}"
-    echo "  Audiobookshelf: https://audiobooks.${DOMAIN:-glaance.io}"
-    echo "  Calibre-web:    https://books.${DOMAIN:-glaance.io}"
+    # Get IPs
+    local ts_ip=$(tailscale ip -4 2>/dev/null || echo "")
+    local lan_ip=$(hostname -I | awk '{print $1}')
 
-    echo -e "\n${BLUE}Admin Services (via Tailscale):${NC}"
-    echo "  Sonarr:         http://homelab-media:8989"
-    echo "  Radarr:         http://homelab-media:7878"
-    echo "  Prowlarr:       http://homelab-media:9696"
-    echo "  Uptime Kuma:    http://homelab-media:3001"
-    echo "  OVOS GUI:       http://homelab-media:8484"
-    echo "  (and more...)"
+    # Check if Cloudflare is configured
+    local cf_configured=false
+    if grep -q "^CLOUDFLARE_TUNNEL_TOKEN=" .env 2>/dev/null; then
+        local token=$(grep "^CLOUDFLARE_TUNNEL_TOKEN=" .env | cut -d'=' -f2)
+        if [ -n "$token" ] && [ "$token" != "your_tunnel_token_here" ]; then
+            cf_configured=true
+        fi
+    fi
+
+    # Get domain from .env
+    local domain=$(grep "^DOMAIN=" .env 2>/dev/null | cut -d'=' -f2)
+
+    if [ "$cf_configured" = true ] && [ -n "$domain" ]; then
+        echo -e "${GREEN}Public Services (via Cloudflare Tunnel):${NC}"
+        echo "  Homarr:         https://homarr.${domain}"
+        echo "  Jellyfin:       https://jellyfin.${domain}"
+        echo "  Jellyseerr:     https://jellyseerr.${domain}"
+        echo "  Immich:         https://photos.${domain}"
+        if [ "$ENABLE_BOOKS" = true ]; then
+            echo "  Audiobookshelf: https://audiobooks.${domain}"
+            echo "  Calibre-web:    https://books.${domain}"
+        fi
+        echo ""
+    fi
+
+    echo -e "${BLUE}All Services (LAN: ${lan_ip}):${NC}"
+    echo "  Homarr:         http://${lan_ip}:7575"
+    echo "  Jellyfin:       http://${lan_ip}:8096"
+    echo "  Jellyseerr:     http://${lan_ip}:5055"
+    echo "  Immich:         http://${lan_ip}:2283"
+    if [ "$ENABLE_BOOKS" = true ]; then
+        echo "  Audiobookshelf: http://${lan_ip}:13378"
+        echo "  Calibre-web:    http://${lan_ip}:8083"
+    fi
+    echo "  Sonarr:         http://${lan_ip}:8989"
+    echo "  Radarr:         http://${lan_ip}:7878"
+    echo "  Prowlarr:       http://${lan_ip}:9696"
+    echo "  Bazarr:         http://${lan_ip}:6767"
+    echo "  Lidarr:         http://${lan_ip}:8686"
+    echo "  qBittorrent:    http://${lan_ip}:8080"
+    echo "  SABnzbd:        http://${lan_ip}:8085"
+    echo "  Tdarr:          http://${lan_ip}:8265"
+    echo "  ARM:            http://${lan_ip}:8090"
+    echo "  Uptime Kuma:    http://${lan_ip}:3001"
+    if [ "$ENABLE_OVOS" = true ]; then
+        echo "  OVOS GUI:       http://${lan_ip}:8484"
+    fi
 
     echo -e "\n${YELLOW}Next Steps:${NC}"
-    echo "  1. Configure Cloudflare Tunnel routes (see README.md)"
-    echo "  2. Set up Tailscale (see README.md)"
-    echo "  3. Configure media libraries in *arr apps"
-    echo "  4. Configure ARM for Blu-ray ripping: http://192.168.8.202:8090"
+    if [ "$cf_configured" = true ]; then
+        echo "  1. Configure Cloudflare Tunnel routes (see docs/networking.md)"
+        echo "  2. Configure media libraries in *arr apps"
+        echo "  3. Configure ARM for Blu-ray ripping: http://${lan_ip}:8090"
+    else
+        echo "  1. Configure media libraries in *arr apps"
+        echo "  2. Configure ARM for Blu-ray ripping: http://${lan_ip}:8090"
+        echo "  3. (Optional) Set up Cloudflare Tunnel for public access"
+    fi
+
+    if [ -n "$ts_ip" ]; then
+        echo -e "\n${GREEN}Tailscale Remote Access:${NC}"
+        echo "  Access any service remotely via: http://${ts_ip}:PORT"
+    fi
 
     echo -e "\n${YELLOW}Important Files:${NC}"
     echo "  .passwords.txt - Auto-generated passwords (DELETE after storing securely)"
@@ -727,8 +1288,10 @@ main() {
 
     check_directory
     check_prerequisites
+    select_media_drive
     generate_env
     create_directories
+    setup_tailscale
     setup_ovos
     setup_arm_udev
     validate_compose

@@ -32,7 +32,7 @@ A complete, privacy-first media server stack running on Ubuntu Server 24.04 LTS.
 
 ### Automated Deployment
 
-Deploy your entire homelab in 2 commands:
+Deploy and configure your entire homelab with automated scripts:
 
 ```bash
 # Clone repository (as root or with sudo)
@@ -40,11 +40,17 @@ sudo git clone https://github.com/brandonpowers/homelab.git /opt/homelab
 sudo chown -R $(whoami):$(whoami) /opt/homelab
 cd /opt/homelab
 
-# Run automated setup
-./scripts/setup-homelab.sh
+# Step 1: Run automated setup
+sudo ./scripts/setup-homelab.sh
+
+# Step 2: Wait for services to start (2-3 minutes)
+docker compose ps
+
+# Step 3: Run automated configuration
+./scripts/configure-services.sh
 ```
 
-**What the script does:**
+**Step 1 - Initial Setup (`setup-homelab.sh`):**
 - ✅ Installs Docker and Docker Compose
 - ✅ Checks all prerequisites
 - ✅ Prompts for configuration (timezone, domain, email, API keys)
@@ -59,7 +65,19 @@ cd /opt/homelab
 - ✅ Verifies all databases created successfully
 - ✅ Shows service status and access URLs
 
-**Total time:** ~15-25 minutes (mostly downloading Docker images)
+**Step 2 - Service Configuration (`configure-services.sh`):**
+- ✅ Extracts API keys from service configs
+- ✅ Links download clients to all *arr apps
+- ✅ Connects Prowlarr to Sonarr/Radarr/Lidarr
+- ✅ Configures FlareSolverr for Cloudflare bypass
+- ✅ Links Bazarr for subtitle management
+- ✅ Syncs TRaSH Guides quality profiles via Recyclarr
+- ✅ Updates `.env` with API keys
+- ✅ 90% of manual configuration automated!
+
+**Total time:** ~20-30 minutes (mostly downloading Docker images)
+
+For detailed information about automated configuration, see **[Automated Configuration Guide](docs/automated-configuration.md)**
 
 ### Manual Setup
 
@@ -94,7 +112,7 @@ If you prefer step-by-step manual configuration, see **[Manual Setup Guide](docs
 └──────────────┬─────────────────────────┬──────────────────┘
                │                         │
                │ Public Services         │ Admin Access
-               │ (*.yourdomain.com)     │ (Authorized only)
+               │ (*.yourdomain.com)      │ (Authorized only)
                ▼                         ▼
      ┌──────────────────┐      ┌──────────────────┐
      │  Cloudflare Edge │      │  Tailscale VPN   │
@@ -105,24 +123,28 @@ If you prefer step-by-step manual configuration, see **[Manual Setup Guide](docs
               │ (No ports open)         │
               ▼                         ▼
 ┌──────────────────────────────────────────────────────────┐
-│                 GL-AX1800 Router                         │
-│              (WireGuard via ProtonVPN)                   │
+│                     Home Router                          │
 └────────────────────────┬─────────────────────────────────┘
                          │
                          ▼
 ┌──────────────────────────────────────────────────────────┐
-│            Ubuntu Server 24.04 LTS (homelab-media)       │
+│              Ubuntu Server 24.04 LTS                     │
+│                                                          │
 │  ┌────────────────────────────────────────────────────┐  │
-│  │        Docker Compose (31 Services)                │  │
-│  │                                                     │  │
+│  │  Tailscale (host-level)                            │  │
+│  └────────────────────────────────────────────────────┘  │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │        Docker Compose Services                     │  │
+│  │                                                    │  │
 │  │  PUBLIC (via Cloudflare):                          │  │
 │  │    Jellyfin, Jellyseerr, Homarr                    │  │
 │  │    Audiobookshelf, Calibre-Web, Immich             │  │
-│  │                                                     │  │
-│  │  PRIVATE (via Tailscale):                          │  │
+│  │                                                    │  │
+│  │  PRIVATE (via LAN or Tailscale):                   │  │
 │  │    *arr apps, Downloads, Tdarr, ARM                │  │
 │  │    Uptime Kuma, OVOS                               │  │
-│  │                                                     │  │
+│  │                                                    │  │
 │  │  BACKEND: PostgreSQL, Redis                        │  │
 │  └────────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────┘
@@ -132,8 +154,9 @@ If you prefer step-by-step manual configuration, see **[Manual Setup Guide](docs
 1. **Home IP never exposed** - Cloudflare Tunnel creates outbound connection only
 2. **No ports opened** - Router firewall remains locked down
 3. **Public services** - Routed through Cloudflare (DDoS protected, SSL at edge)
-4. **Admin services** - Only accessible via Tailscale (zero-trust encrypted mesh)
-5. **Local access** - All services still available on home network via IP:PORT
+4. **Admin services** - Accessible via LAN or Tailscale (zero-trust encrypted mesh)
+5. **Local access** - All services available on home network via `SERVER_IP:PORT`
+6. **Remote access** - All services available via Tailscale IP
 
 ## Service Access
 
@@ -147,23 +170,23 @@ Accessible from anywhere with **home IP hidden**:
 - **Audiobooks** → https://audiobooks.yourdomain.com
 - **E-books** → https://books.yourdomain.com
 
-### Private Admin Services (via Tailscale)
-Secure access from **authorized devices only**:
+### Private Admin Services (LAN or Tailscale)
+Access from your local network or remotely via Tailscale:
 
-- **Sonarr** → http://homelab-media:8989
-- **Radarr** → http://homelab-media:7878
-- **Lidarr** → http://homelab-media:8686
-- **Prowlarr** → http://homelab-media:9696
-- **Bazarr** → http://homelab-media:6767
-- **qBittorrent** → http://homelab-media:8080
-- **SABnzbd** → http://homelab-media:8085
-- **Tdarr** → http://homelab-media:8265
-- **ARM (Blu-ray Ripper)** → http://homelab-media:8090
-- **Uptime Kuma** → http://homelab-media:3001
-- **OVOS GUI** → http://homelab-media:8484 (disabled by default)
+| Service | Port | LAN URL | Tailscale URL |
+|---------|------|---------|---------------|
+| Sonarr | 8989 | http://SERVER_IP:8989 | http://TAILSCALE_IP:8989 |
+| Radarr | 7878 | http://SERVER_IP:7878 | http://TAILSCALE_IP:7878 |
+| Lidarr | 8686 | http://SERVER_IP:8686 | http://TAILSCALE_IP:8686 |
+| Prowlarr | 9696 | http://SERVER_IP:9696 | http://TAILSCALE_IP:9696 |
+| Bazarr | 6767 | http://SERVER_IP:6767 | http://TAILSCALE_IP:6767 |
+| qBittorrent | 8080 | http://SERVER_IP:8080 | http://TAILSCALE_IP:8080 |
+| SABnzbd | 8085 | http://SERVER_IP:8085 | http://TAILSCALE_IP:8085 |
+| Tdarr | 8265 | http://SERVER_IP:8265 | http://TAILSCALE_IP:8265 |
+| ARM | 8090 | http://SERVER_IP:8090 | http://TAILSCALE_IP:8090 |
+| Uptime Kuma | 3001 | http://SERVER_IP:3001 | http://TAILSCALE_IP:3001 |
 
-### Local Network Access
-Direct access within your home network at `http://CT-IP:PORT`
+Get your Tailscale IP: `tailscale ip -4`
 
 ## Maintenance
 
@@ -223,9 +246,8 @@ docker compose up -d
 - GPU: Intel QuickSync recommended for transcoding
 
 **Software:**
-- Proxmox VE (or any Linux host)
-- Docker & Docker Compose
-- Ubuntu 24.04 (or similar)
+- Ubuntu Server 24.04 LTS (recommended)
+- Docker & Docker Compose (installed by setup script)
 
 **Network:**
 - Domain name (for Cloudflare Tunnel)
@@ -255,8 +277,9 @@ docker compose restart servicename
 # Check Cloudflare Tunnel
 docker compose logs cloudflared
 
-# Check Tailscale
-docker compose exec tailscale tailscale status
+# Check Tailscale (installed on host)
+tailscale status
+tailscale ip -4
 ```
 
 ### Database Issues

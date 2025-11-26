@@ -15,27 +15,14 @@ Your homelab now includes a full Open Voice OS stack with the following componen
 
 ## Prerequisites
 
-### 1. Proxmox LXC Audio Device Passthrough
+### 1. Audio Device Access
 
-For OVOS to access audio devices (microphone and speakers), you need to pass through audio devices from the Proxmox host to your LXC container.
+For OVOS to access audio devices (microphone and speakers), ensure audio devices are available on your Ubuntu server.
 
-**On the Proxmox host**, run:
-
-```bash
-# Find your container ID (usually 101 for homelab-media)
-pct list
-
-# Pass through audio devices to the container
-pct set 101 -dev0 /dev/snd,/dev/snd
-
-# Restart the container for changes to take effect
-pct restart 101
-```
-
-**Verify audio devices in the container:**
+**Verify audio devices:**
 
 ```bash
-# Inside the LXC container
+# Check audio devices are available
 ls -la /dev/snd/
 
 # You should see output like:
@@ -45,19 +32,20 @@ ls -la /dev/snd/
 # crw-rw----+ 1 root audio 116, 17 Nov 21 10:00 pcmC0D0p
 ```
 
-### 2. USB Audio Device Passthrough (Optional)
+### 2. USB Audio Device (Optional)
 
-If you're using a USB microphone or speakers, you can pass through the entire USB device:
+If you're using a USB microphone or speakers, they should be automatically detected:
 
 ```bash
-# On Proxmox host, find the USB device
+# List USB devices
 lsusb
 
 # Example output:
 # Bus 001 Device 004: ID 046d:0825 Logitech, Inc. Webcam C270
 
-# Pass through USB device (using bus and device number)
-pct set 101 -usb0 host=1-4
+# List audio devices
+arecord -l
+aplay -l
 ```
 
 ### 3. Audio System Requirements
@@ -221,13 +209,19 @@ docker compose logs -f ovos-core ovos-audio
 
 ### Audio Devices Not Found
 
-**Symptom:** `/dev/snd` doesn't exist in the container
+**Symptom:** `/dev/snd` doesn't exist
 
 **Solution:**
 ```bash
-# On Proxmox host
-pct set 101 -dev0 /dev/snd,/dev/snd
-pct restart 101
+# Check if audio devices are connected
+lspci | grep -i audio
+lsusb | grep -i audio
+
+# Load audio modules if needed
+sudo modprobe snd-hda-intel
+
+# Add user to audio group
+sudo usermod -aG audio $USER
 ```
 
 ### PulseAudio Socket Not Found

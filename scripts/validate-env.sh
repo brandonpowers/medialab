@@ -24,7 +24,6 @@ required_vars=(
   "PGID"
   "MEDIA_ROOT"
   "CLOUDFLARE_TUNNEL_TOKEN"
-  "TAILSCALE_AUTH_KEY"
   "TMDB_API_KEY"
 )
 
@@ -42,9 +41,6 @@ for var in "${required_vars[@]}"; do
   elif grep -q "^${var}=.*_here$" .env 2>/dev/null; then
     unconfigured+=("$var")
     echo "  [!] $var - NEEDS CONFIGURATION (still set to placeholder)"
-  elif grep -q "^${var}=tskey-auth-xxxxxxxxxxxxx$" .env 2>/dev/null; then
-    unconfigured+=("$var")
-    echo "  [!] $var - NEEDS CONFIGURATION (still set to example value)"
   else
     echo "  [✓] $var - configured"
   fi
