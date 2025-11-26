@@ -759,6 +759,7 @@ create_directories() {
         "data/prowlarr/config"
         "data/bazarr/config"
         "data/recyclarr/config"
+        "data/recyclarr/config/cache"
         "data/qbittorrent/config"
         "data/sabnzbd/config"
         "data/tdarr/server"

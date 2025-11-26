@@ -74,15 +74,25 @@ wait_for_service() {
 # Get API key from service config
 get_api_key() {
     local service="$1"
-    local config_file="${PROJECT_ROOT}/data/${service}/config/config.xml"
+    local api_key=""
 
-    if [ ! -f "$config_file" ]; then
-        echo ""
-        return 1
+    # Handle different config formats
+    if [ "$service" = "bazarr" ]; then
+        # Bazarr uses YAML config
+        local config_file="${PROJECT_ROOT}/data/${service}/config/config/config.yaml"
+        if [ -f "$config_file" ]; then
+            api_key=$(grep -oP '^\s*apikey:\s*\K\S+' "$config_file" 2>/dev/null | head -1 || true)
+        fi
+    else
+        # *arr apps use XML config
+        local config_file="${PROJECT_ROOT}/data/${service}/config/config.xml"
+        if [ -f "$config_file" ]; then
+            api_key=$(grep -oP '<ApiKey>\K[^<]+' "$config_file" 2>/dev/null || true)
+        fi
     fi
 
-    # Extract API key from XML config
-    grep -oP '<ApiKey>\K[^<]+' "$config_file" || echo ""
+    echo "$api_key"
+    return 0
 }
 
 # Update .env with API key only if not already set or different
@@ -140,16 +150,18 @@ prompt_credential() {
     fi
 
     # Prompt user
+    local value=""
     if [ "$is_secret" = "true" ]; then
         read -s -p "$prompt_text" value
-        echo ""
+        echo "" >&2  # Newline to stderr so it doesn't get captured
     else
         read -p "$prompt_text" value
     fi
 
-    # Save to .env if provided
+    # Save to .env if provided (quote values with special characters)
     if [ -n "$value" ]; then
-        echo "${var_name}=${value}" >> "$PROJECT_ROOT/.env"
+        # Use single quotes to safely handle special characters
+        echo "${var_name}='${value}'" >> "$PROJECT_ROOT/.env"
     fi
 
     echo "$value"
@@ -551,51 +563,56 @@ sleep 5
 BAZARR_API_KEY=$(get_api_key "bazarr")
 
 if [ -z "$BAZARR_API_KEY" ]; then
-    print_error "Failed to get Bazarr API key - it may need manual configuration"
+    print_warning "Bazarr API key not found - it may need manual configuration"
     print_info "Visit http://localhost:6767 to complete Bazarr setup"
 else
     print_success "Bazarr API key: $BAZARR_API_KEY"
 
-    # Link Sonarr to Bazarr
+    # Link Sonarr to Bazarr via settings API
     if [ -n "$SONARR_API_KEY" ]; then
         print_info "Linking Sonarr to Bazarr..."
-        curl -s -X POST "http://localhost:6767/api/system/settings" \
+        # Bazarr uses PATCH to /api/system/settings with specific section
+        curl -s -X PATCH "http://localhost:6767/api/system/settings/sonarr" \
             -H "X-Api-Key: $BAZARR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{
-                \"settings\": {
-                    \"sonarr\": {
-                        \"ip\": \"sonarr\",
-                        \"port\": 8989,
-                        \"base_url\": \"/\",
-                        \"ssl\": false,
-                        \"apikey\": \"${SONARR_API_KEY}\",
-                        \"full_update\": \"Daily\",
-                        \"only_monitored\": true
-                    }
-                }
+                \"ip\": \"sonarr\",
+                \"port\": 8989,
+                \"base_url\": \"/\",
+                \"ssl\": false,
+                \"apikey\": \"${SONARR_API_KEY}\",
+                \"full_update\": \"Daily\",
+                \"only_monitored\": false
             }" > /dev/null 2>&1 && print_success "Sonarr linked" || print_warning "Manual Sonarr configuration may be needed"
+
+        # Enable Sonarr in general settings
+        curl -s -X PATCH "http://localhost:6767/api/system/settings/general" \
+            -H "X-Api-Key: $BAZARR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"use_sonarr": true}' > /dev/null 2>&1 || true
     fi
 
-    # Link Radarr to Bazarr
+    # Link Radarr to Bazarr via settings API
     if [ -n "$RADARR_API_KEY" ]; then
         print_info "Linking Radarr to Bazarr..."
-        curl -s -X POST "http://localhost:6767/api/system/settings" \
+        curl -s -X PATCH "http://localhost:6767/api/system/settings/radarr" \
             -H "X-Api-Key: $BAZARR_API_KEY" \
             -H "Content-Type: application/json" \
             -d "{
-                \"settings\": {
-                    \"radarr\": {
-                        \"ip\": \"radarr\",
-                        \"port\": 7878,
-                        \"base_url\": \"/\",
-                        \"ssl\": false,
-                        \"apikey\": \"${RADARR_API_KEY}\",
-                        \"full_update\": \"Daily\",
-                        \"only_monitored\": true
-                    }
-                }
+                \"ip\": \"radarr\",
+                \"port\": 7878,
+                \"base_url\": \"/\",
+                \"ssl\": false,
+                \"apikey\": \"${RADARR_API_KEY}\",
+                \"full_update\": \"Daily\",
+                \"only_monitored\": false
             }" > /dev/null 2>&1 && print_success "Radarr linked" || print_warning "Manual Radarr configuration may be needed"
+
+        # Enable Radarr in general settings
+        curl -s -X PATCH "http://localhost:6767/api/system/settings/general" \
+            -H "X-Api-Key: $BAZARR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d '{"use_radarr": true}' > /dev/null 2>&1 || true
     fi
 fi
 
@@ -604,6 +621,24 @@ fi
 # ============================================
 
 print_section "Usenet Configuration (Optional)"
+
+# Get SABnzbd API key from config file
+get_sabnzbd_api_key() {
+    local config_file="${PROJECT_ROOT}/data/sabnzbd/config/sabnzbd.ini"
+    if [ -f "$config_file" ]; then
+        grep -oP '^api_key\s*=\s*\K\S+' "$config_file" 2>/dev/null || true
+    fi
+}
+
+# Check if SABnzbd needs initial setup wizard
+check_sabnzbd_ready() {
+    local api_key
+    api_key=$(get_sabnzbd_api_key)
+    if [ -n "$api_key" ] && [ "$api_key" != "changeme" ]; then
+        return 0
+    fi
+    return 1
+}
 
 # Check if user wants to configure Usenet
 CONFIGURE_USENET="n"
@@ -615,14 +650,40 @@ fi
 if [[ "$CONFIGURE_USENET" =~ ^[Yy]$ ]]; then
     print_info "Configuring Newshosting..."
 
+    # Check if SABnzbd wizard needs to be completed
+    if ! check_sabnzbd_ready; then
+        echo ""
+        print_warning "SABnzbd requires initial setup wizard completion."
+        print_info ""
+        print_info "Please complete the following steps:"
+        print_info "  1. Open http://localhost:8085 in your browser"
+        print_info "  2. Select your language and click 'Start Wizard'"
+        print_info "  3. Skip the server configuration (we'll add it automatically)"
+        print_info "  4. Complete the wizard by clicking through to the end"
+        print_info ""
+        echo -n "Press Enter once you've completed the SABnzbd wizard..."
+        read -r
+
+        # Wait a moment for SABnzbd to save config
+        sleep 3
+
+        if ! check_sabnzbd_ready; then
+            print_error "SABnzbd still not ready. Please complete the wizard and re-run this script."
+            print_info "Skipping Newshosting configuration for now."
+            CONFIGURE_USENET="n"
+        fi
+    fi
+fi
+
+if [[ "$CONFIGURE_USENET" =~ ^[Yy]$ ]]; then
     NEWSHOSTING_USER=$(prompt_credential "NEWSHOSTING_USER" "Newshosting username: " "false")
     NEWSHOSTING_PASS=$(prompt_credential "NEWSHOSTING_PASS" "Newshosting password: " "true")
     NEWSHOSTING_CONNECTIONS=$(prompt_credential "NEWSHOSTING_CONNECTIONS" "Max connections (default 30): " "false")
     NEWSHOSTING_CONNECTIONS=${NEWSHOSTING_CONNECTIONS:-30}
 
     if [ -n "$NEWSHOSTING_USER" ] && [ -n "$NEWSHOSTING_PASS" ]; then
-        # Get SABnzbd API key
-        SABNZBD_API_KEY=$(curl -s "http://localhost:8085/sabnzbd/api?mode=get_config" 2>/dev/null | grep -oP '"api_key"\s*:\s*"\K[^"]+' || echo "")
+        # Get SABnzbd API key from config file
+        SABNZBD_API_KEY=$(get_sabnzbd_api_key)
 
         if [ -n "$SABNZBD_API_KEY" ]; then
             print_info "Adding Newshosting server to SABnzbd..."
@@ -642,8 +703,60 @@ if [[ "$CONFIGURE_USENET" =~ ^[Yy]$ ]]; then
 
             # Save SABnzbd API key to .env
             update_env_api_key "SABNZBD_API_KEY" "$SABNZBD_API_KEY"
+
+            # Now add SABnzbd to the *arr apps since we have the API key
+            print_info "Adding SABnzbd to Sonarr..."
+            if [ -n "$SONARR_API_KEY" ]; then
+                curl -s -X POST "http://localhost:8989/api/v3/downloadclient" \
+                    -H "X-Api-Key: $SONARR_API_KEY" \
+                    -H "Content-Type: application/json" \
+                    -d "{
+                        \"enable\": true,
+                        \"protocol\": \"usenet\",
+                        \"priority\": 1,
+                        \"removeCompletedDownloads\": true,
+                        \"removeFailedDownloads\": true,
+                        \"name\": \"SABnzbd\",
+                        \"fields\": [
+                            {\"name\": \"host\", \"value\": \"sabnzbd\"},
+                            {\"name\": \"port\", \"value\": 8080},
+                            {\"name\": \"apiKey\", \"value\": \"${SABNZBD_API_KEY}\"},
+                            {\"name\": \"tvCategory\", \"value\": \"tv\"}
+                        ],
+                        \"implementationName\": \"SABnzbd\",
+                        \"implementation\": \"Sabnzbd\",
+                        \"configContract\": \"SabnzbdSettings\",
+                        \"tags\": []
+                    }" > /dev/null 2>&1 && print_success "SABnzbd added to Sonarr" || print_warning "SABnzbd may already exist in Sonarr"
+            fi
+
+            print_info "Adding SABnzbd to Radarr..."
+            if [ -n "$RADARR_API_KEY" ]; then
+                curl -s -X POST "http://localhost:7878/api/v3/downloadclient" \
+                    -H "X-Api-Key: $RADARR_API_KEY" \
+                    -H "Content-Type: application/json" \
+                    -d "{
+                        \"enable\": true,
+                        \"protocol\": \"usenet\",
+                        \"priority\": 1,
+                        \"removeCompletedDownloads\": true,
+                        \"removeFailedDownloads\": true,
+                        \"name\": \"SABnzbd\",
+                        \"fields\": [
+                            {\"name\": \"host\", \"value\": \"sabnzbd\"},
+                            {\"name\": \"port\", \"value\": 8080},
+                            {\"name\": \"apiKey\", \"value\": \"${SABNZBD_API_KEY}\"},
+                            {\"name\": \"movieCategory\", \"value\": \"movies\"}
+                        ],
+                        \"implementationName\": \"SABnzbd\",
+                        \"implementation\": \"Sabnzbd\",
+                        \"configContract\": \"SabnzbdSettings\",
+                        \"tags\": []
+                    }" > /dev/null 2>&1 && print_success "SABnzbd added to Radarr" || print_warning "SABnzbd may already exist in Radarr"
+            fi
         else
-            print_warning "Could not get SABnzbd API key - configure Newshosting manually at http://localhost:8085"
+            print_error "Could not get SABnzbd API key after wizard completion"
+            print_info "Configure Newshosting manually at http://localhost:8085"
         fi
     fi
 else
@@ -707,13 +820,41 @@ fi
 if [ -n "$SONARR_API_KEY" ] && [ -n "$RADARR_API_KEY" ]; then
     print_section "Syncing Quality Profiles with Recyclarr"
 
-    print_info "Running Recyclarr sync..."
-    if docker compose run --rm recyclarr sync; then
-        print_success "Quality profiles synced successfully"
-        print_info "Custom formats from TRaSH Guides have been applied"
-    else
-        print_warning "Recyclarr sync failed - you may need to run it manually later"
-        print_info "Run: docker compose run --rm recyclarr sync"
+    # Ensure recyclarr config directory and cache exist
+    RECYCLARR_CONFIG_DIR="${PROJECT_ROOT}/data/recyclarr/config"
+    RECYCLARR_CACHE="${RECYCLARR_CONFIG_DIR}/cache"
+    mkdir -p "$RECYCLARR_CACHE"
+
+    # Copy recyclarr.yml config if it doesn't exist
+    if [ ! -f "${RECYCLARR_CONFIG_DIR}/recyclarr.yml" ]; then
+        if [ -f "${PROJECT_ROOT}/config/recyclarr.yml" ]; then
+            cp "${PROJECT_ROOT}/config/recyclarr.yml" "${RECYCLARR_CONFIG_DIR}/recyclarr.yml"
+            print_success "Copied recyclarr.yml configuration"
+        else
+            print_error "config/recyclarr.yml not found in project"
+            print_info "Skipping Recyclarr sync"
+        fi
+    fi
+
+    # Fix ownership if running as root
+    if [ "$(id -u)" = "0" ]; then
+        chown -R "${PUID:-1000}:${PGID:-1000}" "${PROJECT_ROOT}/data/recyclarr"
+    fi
+
+    # Only run if config exists
+    if [ -f "${RECYCLARR_CONFIG_DIR}/recyclarr.yml" ]; then
+        print_info "Running Recyclarr sync..."
+        # Pass API keys as environment variables to the container
+        if docker compose run --rm \
+            -e SONARR_API_KEY="$SONARR_API_KEY" \
+            -e RADARR_API_KEY="$RADARR_API_KEY" \
+            recyclarr sync; then
+            print_success "Quality profiles synced successfully"
+            print_info "Custom formats from TRaSH Guides have been applied"
+        else
+            print_warning "Recyclarr sync failed - you may need to run it manually later"
+            print_info "Run: docker compose run --rm recyclarr sync"
+        fi
     fi
 fi
 

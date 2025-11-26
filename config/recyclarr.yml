@@ -6,7 +6,7 @@
 sonarr:
   tv-shows:
     base_url: http://sonarr:8989
-    api_key: !env SONARR_API_KEY
+    api_key: !env_var SONARR_API_KEY
 
     # Delete old custom formats not in the guide
     delete_old_custom_formats: true
@@ -53,27 +53,15 @@ sonarr:
           - 3ac5d84fce98bab1b531393e9c82f467  # iT (iTunes)
           - d34870697c9db575f17700212167be23  # NF (Netflix)
           - 1656adc6d7bb2c8cca6acfb6592db421  # PCOK (Peacock)
-          - c67a75ae4a1715f2bb4d492755ba4a93  # PMTP (Paramount+)
-        quality_profiles:
+        assign_scores_to:
           - name: WEB-1080p
-
-      # HDR Formats
-      - trash_ids:
-          - 2b239ed870daba8126a53bd5dc8dc1c8  # DV HDR10+
-          - 7878c33f1963fefb3d6c8657d46c2f0a  # DV HDR10
-          - 6d0d8de7b57e35518ac0308b0ddf404e  # DV
-          - 1f733af03141f068a540eec352589a89  # DV HLG
-          - 27954b0a80aab882522a88a4d9eae1cd  # DV SDR
-        quality_profiles:
-          - name: WEB-1080p
-            score: 0  # Neutral score - not preferred but accepted
 
       # Unwanted content (negative scores)
       - trash_ids:
           - 85c61753df5da1fb2aab6f2a47426b09  # BR-DISK
           - 9c11cd3f07101cdba90a2d81cf0e56b4  # LQ
           - 47435ece6b99a0b477caf360e79ba0bb  # x265 (HD)
-        quality_profiles:
+        assign_scores_to:
           - name: WEB-1080p
             score: -10000
 
@@ -81,7 +69,7 @@ sonarr:
 radarr:
   movies:
     base_url: http://radarr:7878
-    api_key: !env RADARR_API_KEY
+    api_key: !env_var RADARR_API_KEY
 
     delete_old_custom_formats: true
     replace_existing_custom_formats: true
@@ -120,7 +108,7 @@ radarr:
           - 09d9dd29a0fc958f9796e65c2a8864b4  # Open Matte
           - 0f12c086e289cf966fa5948eac571f44  # Theatrical Cut
           - 570bc9ebecd92723d2d21500f4be314c  # Remaster
-        quality_profiles:
+        assign_scores_to:
           - name: HD-1080p
 
       # Streaming Services
@@ -139,7 +127,7 @@ radarr:
           - bf7e73dd1d85b12cc527dc619761c840  # Pathe
           - c9fd353f8f5f1baf56dc601c4cb29920  # PCOK
           - e36a0ba1bc902b26ee40818a1d59b8bd  # PMTP
-        quality_profiles:
+        assign_scores_to:
           - name: HD-1080p
 
       # Audio
@@ -150,9 +138,8 @@ radarr:
           - 1af239278386be2919e1bcee0bde047e  # DD+ Atmos
           - 3cafb66171b47f226146a0770576870f  # TrueHD
           - dcf3ec6938fa32445f590a4da84256cd  # DTS-HD MA
-          - a570d4a0e56a2874b64e5bfa55202908  # FLAC
           - e7c2fcae07cbada050a0af3357491d7b  # PCM
-        quality_profiles:
+        assign_scores_to:
           - name: HD-1080p
 
       # Unwanted
@@ -161,6 +148,6 @@ radarr:
           - 90a6f9a284dff5103f6346090e6280c8  # LQ
           - dc98083864ea246d05a42df0d05f81cc  # x265 (HD)
           - b8cd450cbfa689c0259a01d9e29ba3d6  # 3D
-        quality_profiles:
+        assign_scores_to:
           - name: HD-1080p
             score: -10000
