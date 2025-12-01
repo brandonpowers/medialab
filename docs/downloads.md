@@ -6,8 +6,8 @@ Download clients for torrents and Usenet.
 
 | Service | Purpose | Access | Port |
 |---------|---------|--------|------|
-| **qBittorrent** | Torrent download client | Private (Tailscale) | 8080 |
-| **SABnzbd** | Usenet download client | Private (Tailscale) | 8085 |
+| **qBittorrent** | Torrent download client | Private (LAN) | 8080 |
+| **SABnzbd** | Usenet download client | Private (LAN) | 8085 |
 
 ---
 
@@ -15,7 +15,7 @@ Download clients for torrents and Usenet.
 
 ### Initial Setup
 
-1. **Access:** http://SERVER_IP:8080 (or via Tailscale)
+1. **Access:** http://SERVER_IP:8080
 
 2. **Default Credentials:**
    ```bash
@@ -113,7 +113,7 @@ You need:
 
 ### Initial Setup
 
-1. **Access:** http://SERVER_IP:8085 (or via Tailscale)
+1. **Access:** http://SERVER_IP:8085
 
 2. **Setup Wizard:**
    - Select language
@@ -445,9 +445,9 @@ docker compose logs sabnzbd
 
 ## Common Access URLs
 
-| Service | LAN URL | Tailscale URL |
-|---------|---------|---------------|
-| qBittorrent | http://SERVER_IP:8080 | http://TAILSCALE_IP:8080 |
-| SABnzbd | http://SERVER_IP:8085 | http://TAILSCALE_IP:8085 |
+| Service | URL |
+|---------|-----|
+| qBittorrent | http://SERVER_IP:8080 |
+| SABnzbd | http://SERVER_IP:8085 |
 
-Both services accessible on your local network or remotely via Tailscale.
+Both services accessible on your local network.

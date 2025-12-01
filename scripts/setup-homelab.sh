@@ -3,6 +3,7 @@ set -e
 
 # Homelab Automated Setup Script
 # This script automates the complete setup of your homelab infrastructure
+# Focused on video streaming: Jellyfin, *arr stack, ARM, Tdarr
 
 # Colors for output
 RED='\033[0;31m'
@@ -14,7 +15,7 @@ NC='\033[0m' # No Color
 # Functions
 print_header() {
     echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║   HOMELAB AUTOMATED SETUP                                ║${NC}"
+    echo -e "${BLUE}║   HOMELAB AUTOMATED SETUP - VIDEO STREAMING               ║${NC}"
     echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
     echo ""
 }
@@ -323,10 +324,6 @@ create_media_structure() {
         "movies"
         "tv"
         "music"
-        "books"
-        "audiobooks"
-        "podcasts"
-        "photos"
         "downloads/complete"
         "downloads/incomplete"
         "downloads/watch"
@@ -365,7 +362,7 @@ install_docker() {
     apt-get update -qq
 
     # Install prerequisites
-    apt-get install -y ca-certificates curl &>/dev/null
+    apt-get install -y ca-certificates curl jq &>/dev/null
     install -m 0755 -d /etc/apt/keyrings
 
     # Add Docker's official GPG key
@@ -492,12 +489,8 @@ generate_env() {
     print_info "Generating secure passwords and tokens..."
 
     # Generate all passwords and tokens
-    local DB_PASSWORD=$(generate_password)
-    local REDIS_PASSWORD=$(generate_password)
     local HOMARR_ENCRYPTION_KEY=$(openssl rand -hex 32)
 
-    print_success "Generated database password"
-    print_success "Generated Redis password"
     print_success "Generated Homarr encryption key"
 
     # Prompt for required values
@@ -526,6 +519,8 @@ generate_env() {
         echo -n "Media root path (default: /mnt/media): "
         read -r MEDIA_ROOT
         MEDIA_ROOT=${MEDIA_ROOT:-/mnt/media}
+        # Ensure media directory structure exists for manually entered paths
+        create_media_structure "$MEDIA_ROOT"
     fi
 
     echo -n "Your email address: "
@@ -559,7 +554,7 @@ generate_env() {
         fi
     else
         print_info "Skipping Cloudflare Tunnel setup"
-        print_info "Services will only be accessible on your local network (and via Tailscale)"
+        print_info "Services will only be accessible on your local network"
         DOMAIN=""
         CLOUDFLARE_TUNNEL_TOKEN=""
     fi
@@ -576,34 +571,12 @@ generate_env() {
         TMDB_API_KEY=""
     fi
 
-    # Optional features
-    print_section "Optional Features"
-
-    echo -n "Enable audiobook/ebook support? (Audiobookshelf + Calibre-Web) (Y/n): "
-    read -r USE_BOOKS
-    if [[ "$USE_BOOKS" =~ ^[Nn]$ ]]; then
-        ENABLE_BOOKS=false
-        print_info "Audiobook/ebook services disabled"
-    else
-        ENABLE_BOOKS=true
-        print_success "Audiobook/ebook services enabled"
-    fi
-
-    echo -n "Enable Open Voice OS? (Local voice assistant) (y/N): "
-    read -r USE_OVOS
-    if [[ "$USE_OVOS" =~ ^[Yy]$ ]]; then
-        ENABLE_OVOS=true
-        print_success "Open Voice OS enabled"
-    else
-        ENABLE_OVOS=false
-        print_info "Open Voice OS disabled"
-    fi
-
     # Create .env file
     cat > .env << EOF
 # ============================================
 # HOMELAB ENVIRONMENT CONFIGURATION
 # Generated: $(date)
+# Video Streaming Focus
 # ============================================
 
 # System Configuration
@@ -612,11 +585,6 @@ PUID=${PUID}
 PGID=${PGID}
 MEDIA_ROOT=${MEDIA_ROOT}
 EMAIL=${EMAIL}
-
-# Database & Cache (Auto-generated)
-DB_USER=homelab
-DB_PASSWORD=${DB_PASSWORD}
-REDIS_PASSWORD=${REDIS_PASSWORD}
 
 # Homarr v1.0 (Auto-generated)
 HOMARR_ENCRYPTION_KEY=${HOMARR_ENCRYPTION_KEY}
@@ -656,8 +624,6 @@ EOF
 HOMELAB PASSWORDS - $(date)
 KEEP THIS FILE SECURE!
 
-Database Password: ${DB_PASSWORD}
-Redis Password: ${REDIS_PASSWORD}
 Homarr Encryption Key: ${HOMARR_ENCRYPTION_KEY}
 
 These passwords have been added to .env
@@ -668,8 +634,6 @@ EOF
     print_success "Passwords saved to .passwords.txt (chmod 600)"
     print_warning "Store these passwords securely and delete .passwords.txt when done"
 
-    # Create/update docker-compose.override.yml for disabled services
-    create_compose_override
 }
 
 # Create docker-compose.override.yml to disable unused services
@@ -698,46 +662,6 @@ EOF
         print_success "Cloudflare Tunnel: enabled"
     fi
 
-    # Disable books services if not wanted
-    if [ "$ENABLE_BOOKS" = false ]; then
-        cat >> docker-compose.override.yml << 'EOF'
-
-  # Audiobook/Ebook services - disabled
-  # To enable: remove this section and restart
-  audiobookshelf:
-    profiles: ["books"]
-  calibre-web:
-    profiles: ["books"]
-EOF
-        print_info "Audiobooks/Ebooks: disabled"
-    else
-        print_success "Audiobooks/Ebooks: enabled"
-    fi
-
-    # Disable OVOS if not wanted
-    if [ "$ENABLE_OVOS" = false ]; then
-        cat >> docker-compose.override.yml << 'EOF'
-
-  # OVOS (Open Voice OS) - disabled
-  # To enable: docker compose --profile ovos up -d
-  ovos-messagebus:
-    profiles: ["ovos"]
-  ovos-phal:
-    profiles: ["ovos"]
-  ovos-audio:
-    profiles: ["ovos"]
-  ovos-listener:
-    profiles: ["ovos"]
-  ovos-core:
-    profiles: ["ovos"]
-  ovos-gui:
-    profiles: ["ovos"]
-EOF
-        print_info "Open Voice OS: disabled"
-    else
-        print_success "Open Voice OS: enabled"
-    fi
-
     print_success "docker-compose.override.yml created"
 }
 
@@ -745,14 +669,15 @@ EOF
 create_directories() {
     print_section "Creating Data Directories"
 
+    # Ensure PUID/PGID are set (use values from generate_env or defaults)
+    local puid=${PUID:-1000}
+    local pgid=${PGID:-1000}
+
     local dirs=(
         "data/homarr/appdata"
         "data/jellyfin/config"
         "data/jellyfin/cache"
         "data/jellyseerr/config"
-        "data/audiobookshelf/config"
-        "data/audiobookshelf/metadata"
-        "data/calibre-web/config"
         "data/sonarr/config"
         "data/radarr/config"
         "data/lidarr/config"
@@ -770,10 +695,6 @@ create_directories() {
         "data/arm/db"
         "data/arm/logs"
         "data/arm/media"
-        "data/immich"
-        "data/ovos/config/phal"
-        "data/ovos/share"
-        "data/ovos/tmp"
     )
 
     for dir in "${dirs[@]}"; do
@@ -788,8 +709,8 @@ create_directories() {
     # Fix ownership for ARM directories (requires PUID:PGID)
     if [ -d "data/arm" ]; then
         print_info "Setting ownership for ARM directories..."
-        chown -R ${PUID}:${PGID} data/arm
-        print_success "ARM directory ownership set to ${PUID}:${PGID}"
+        chown -R ${puid}:${pgid} data/arm
+        print_success "ARM directory ownership set to ${puid}:${pgid}"
 
         # Fix ARM config file permissions for web UI write access
         if [ -f "data/arm/config/arm.yaml" ]; then
@@ -801,174 +722,6 @@ create_directories() {
     print_success "All data directories ready"
 }
 
-# Setup Open Voice OS configuration
-setup_ovos() {
-    # Skip if OVOS is disabled
-    if [ "$ENABLE_OVOS" = false ]; then
-        return
-    fi
-
-    print_section "Setting Up Open Voice OS"
-
-    # Create OVOS config file if it doesn't exist
-    if [ ! -f "data/ovos/config/mycroft.conf" ]; then
-        print_info "Creating OVOS configuration file..."
-        cat > data/ovos/config/mycroft.conf << 'EOFCONF'
-{
-  "lang": "en-us",
-  "logs": {
-    "path": "stdout"
-  },
-  "play_wav_cmdline": "paplay %1",
-  "listener": {
-    "wake_word": "hey_mycroft",
-    "stand_up_word": "wake_up",
-    "phoneme_duration": 120,
-    "multiplier": 1.0,
-    "energy_ratio": 1.5,
-    "recording_timeout": 10.0,
-    "recording_timeout_with_silence": 3.0
-  },
-  "stt": {
-    "module": "ovos-stt-plugin-vosk"
-  },
-  "tts": {
-    "module": "ovos-tts-plugin-mimic3"
-  },
-  "gui": {
-    "enabled": true,
-    "idle_display_skill": "skill-ovos-homescreen.openvoiceos"
-  },
-  "skills": {
-    "blacklisted_skills": [],
-    "priority_skills": []
-  },
-  "server": {
-    "disabled": true
-  },
-  "enclosure": {
-    "platform": "generic"
-  }
-}
-EOFCONF
-        print_success "OVOS configuration created"
-    else
-        print_info "OVOS configuration already exists"
-    fi
-
-    # Check for audio device access
-    print_info "Checking audio device availability..."
-    if [ -e /dev/snd ]; then
-        print_success "Audio devices found at /dev/snd"
-    else
-        print_warning "Audio devices not found at /dev/snd"
-        print_warning "OVOS audio services may not work without audio device access"
-        print_info "Ensure your user has access to audio devices"
-    fi
-
-    # Check if user is in audio group (idempotent)
-    local CURRENT_USER=$(whoami)
-    if groups "$CURRENT_USER" | grep -q '\baudio\b'; then
-        print_info "User already in audio group"
-    else
-        print_info "Adding user to audio group..."
-        if sudo usermod -aG audio "$CURRENT_USER" 2>/dev/null; then
-            print_success "User added to audio group (requires re-login to take effect)"
-        else
-            print_warning "Could not add user to audio group (may require manual configuration)"
-        fi
-    fi
-
-    # Check for PulseAudio
-    print_info "Checking audio system..."
-    if [ -S "/run/user/1000/pulse/native" ]; then
-        print_success "PulseAudio socket found"
-    elif command -v pulseaudio &> /dev/null; then
-        print_info "PulseAudio installed but socket not found"
-        print_info "Starting PulseAudio..."
-        pulseaudio --start 2>/dev/null || true
-    else
-        print_warning "PulseAudio not found - installing..."
-        if sudo apt-get update && sudo apt-get install -y pulseaudio pulseaudio-utils 2>/dev/null; then
-            print_success "PulseAudio installed"
-            pulseaudio --start 2>/dev/null || true
-        else
-            print_warning "Could not install PulseAudio automatically"
-        fi
-    fi
-
-    # Enable user lingering (idempotent)
-    if loginctl show-user "$CURRENT_USER" 2>/dev/null | grep -q "Linger=yes"; then
-        print_info "User lingering already enabled"
-    else
-        print_info "Enabling user lingering..."
-        if sudo loginctl enable-linger "$CURRENT_USER" 2>/dev/null; then
-            print_success "User lingering enabled"
-        else
-            print_warning "Could not enable user lingering (may require manual configuration)"
-        fi
-    fi
-}
-
-# Install Tailscale on the host for remote access
-setup_tailscale() {
-    print_section "Setting Up Tailscale"
-
-    # Check if Tailscale is already installed
-    if command -v tailscale &> /dev/null; then
-        print_success "Tailscale is already installed"
-        local ts_status=$(tailscale status --json 2>/dev/null | grep -o '"BackendState":"[^"]*"' | cut -d'"' -f4)
-        if [ "$ts_status" == "Running" ]; then
-            print_success "Tailscale is connected"
-            tailscale status | head -5
-        else
-            print_info "Tailscale is installed but not connected"
-            echo -n "Connect to Tailscale now? (Y/n): "
-            read -r response
-            if [[ ! "$response" =~ ^[Nn]$ ]]; then
-                print_info "Starting Tailscale authentication..."
-                tailscale up --hostname=homelab
-                print_success "Tailscale connected"
-            fi
-        fi
-        return
-    fi
-
-    echo -n "Install Tailscale for remote access? (Y/n): "
-    read -r response
-    if [[ "$response" =~ ^[Nn]$ ]]; then
-        print_info "Skipping Tailscale installation"
-        return
-    fi
-
-    print_info "Installing Tailscale..."
-
-    # Install using official script
-    curl -fsSL https://tailscale.com/install.sh | sh
-
-    if command -v tailscale &> /dev/null; then
-        print_success "Tailscale installed successfully"
-
-        # Enable and start the service
-        systemctl enable --now tailscaled
-
-        print_info "Starting Tailscale authentication..."
-        print_info "A browser window will open for authentication."
-        echo ""
-
-        # Start Tailscale with a hostname
-        tailscale up --hostname=homelab
-
-        print_success "Tailscale is now running"
-        print_info "Your Tailscale IP:"
-        tailscale ip -4
-        echo ""
-        print_info "Access services remotely at: http://$(tailscale ip -4):PORT"
-    else
-        print_error "Tailscale installation failed"
-        print_info "You can install manually later: https://tailscale.com/download/linux"
-    fi
-}
 
 # Setup ARM (Automatic Ripping Machine) udev auto-detection
 setup_arm_udev() {
@@ -983,102 +736,41 @@ setup_arm_udev() {
 
     print_success "Optical drive found at /dev/sr0"
 
-    # Create ARM scripts directory
-    if [ ! -d "/opt/arm/scripts" ]; then
-        print_info "Creating /opt/arm/scripts directory..."
-        sudo mkdir -p /opt/arm/scripts
-    fi
-
-    # Create udev wrapper script for docker-compose
+    # Create ARM udev wrapper script
+    # This script passes udev environment variables into the ARM container
     print_info "Creating ARM udev wrapper script..."
-    sudo tee /opt/arm/scripts/docker_arm_wrapper.sh > /dev/null << 'WRAPPER_EOF'
+    cat > /usr/local/bin/arm-udev-wrapper.sh << 'WRAPPER_EOF'
 #!/bin/bash
-# ARM udev wrapper for docker-compose
-# This script is called by udev when an optical disc is inserted
-
-set -euo pipefail
+# ARM udev wrapper - passes udev environment variables to ARM container
+# Called by udev when an optical disc is inserted
 
 DEVNAME="$1"
-CONTAINER_NAME="arm"
 
-# Find homelab directory - check common locations
-if [ -f "/home/*/homelab/docker-compose.yml" ]; then
-    HOMELAB_DIR=$(dirname $(ls /home/*/homelab/docker-compose.yml 2>/dev/null | head -1))
-elif [ -f "/opt/homelab/docker-compose.yml" ]; then
-    HOMELAB_DIR="/opt/homelab"
-else
-    echo "$(date) [ARM] Could not find homelab directory" >> /var/log/arm-wrapper.log
-    exit 1
-fi
-
-# Wait for disc to be fully readable
-sleep 5
-
-echo "$(date) [ARM] Entering docker wrapper for ${DEVNAME}" >> /var/log/arm-wrapper.log
-
-# Exit if udev properties not available yet
-if [[ -z "${!ID_CDROM_MEDIA_*}" ]] ; then
-    echo "$(date) [ARM] Disc not ready yet, exiting" >> /var/log/arm-wrapper.log
-    exit 0
-fi
-
-# Fix device path if needed
-if [[ ! -b "${DEVNAME}" && -b "/dev/${DEVNAME}" ]] ; then
-    DEVNAME="/dev/${DEVNAME}"
-fi
-
-# Get disc type and label from udev
-if [[ -z "${!ID_CDROM_MEDIA_*}" ]] ; then
-    eval "$(udevadm info --query=env --export "${DEVNAME}")"
-fi
-
-# Determine disc type (use defaults to avoid unbound variable errors)
-if [ "${ID_CDROM_MEDIA_DVD:-0}" == "1" ]; then
-    DISC_TYPE="DVD"
-elif [ "${ID_CDROM_MEDIA_BD:-0}" == "1" ]; then
-    DISC_TYPE="Blu-ray"
-elif [ "${ID_CDROM_MEDIA_CD:-0}" == "1" ] || [ "${ID_CDROM_MEDIA_CD_R:-0}" == "1" ] || [ "${ID_CDROM_MEDIA_CD_RW:-0}" == "1" ]; then
-    DISC_TYPE="CD"
-elif [ -n "${ID_FS_TYPE:-}" ]; then
-    DISC_TYPE="Data"
-else
-    echo "$(date) [ARM] Unknown disc type, exiting" >> /var/log/arm-wrapper.log
-    exit 0
-fi
-
-echo "$(date) [ARM] Detected ${DISC_TYPE} disc (label: ${ID_FS_LABEL:-unknown}) on ${DEVNAME}" >> /var/log/arm-wrapper.log
-
-# Start ARM in the existing docker-compose container
-# Export udev environment variables so ARM can read disc properties
-cd "${HOMELAB_DIR}"
-docker compose exec -T \
-    -e ID_CDROM_MEDIA_DVD="${ID_CDROM_MEDIA_DVD:-0}" \
-    -e ID_CDROM_MEDIA_BD="${ID_CDROM_MEDIA_BD:-0}" \
-    -e ID_CDROM_MEDIA_CD="${ID_CDROM_MEDIA_CD:-0}" \
-    -e ID_FS_LABEL="${ID_FS_LABEL:-}" \
-    "${CONTAINER_NAME}" \
-    /opt/arm/scripts/docker/docker_arm_wrapper.sh "${DEVNAME##*/}" \
-    >> /var/log/arm-wrapper.log 2>&1
-
-echo "$(date) [ARM] Rip started successfully" >> /var/log/arm-wrapper.log
+# Export udev environment variables to the container
+# The ARM docker_arm_wrapper.sh script checks these to determine disc type
+/usr/bin/docker exec -d \
+  -e "ID_CDROM_MEDIA_BD=${ID_CDROM_MEDIA_BD}" \
+  -e "ID_CDROM_MEDIA_DVD=${ID_CDROM_MEDIA_DVD}" \
+  -e "ID_CDROM_MEDIA_CD=${ID_CDROM_MEDIA_CD}" \
+  -e "ID_CDROM_MEDIA_CD_R=${ID_CDROM_MEDIA_CD_R}" \
+  -e "ID_CDROM_MEDIA_CD_RW=${ID_CDROM_MEDIA_CD_RW}" \
+  -e "ID_FS_TYPE=${ID_FS_TYPE}" \
+  -e "ID_FS_LABEL=${ID_FS_LABEL}" \
+  arm /opt/arm/scripts/docker/docker_arm_wrapper.sh "$DEVNAME"
 WRAPPER_EOF
 
-    sudo chmod +x /opt/arm/scripts/docker_arm_wrapper.sh
-    print_success "ARM wrapper script created at /opt/arm/scripts/docker_arm_wrapper.sh"
+    chmod +x /usr/local/bin/arm-udev-wrapper.sh
+    print_success "ARM wrapper script created at /usr/local/bin/arm-udev-wrapper.sh"
 
-    # Create udev rule
+    # Create udev rule (must be single line to avoid parsing errors)
     print_info "Creating udev rule..."
-    sudo tee /etc/udev/rules.d/99-arm-docker.rules > /dev/null << 'UDEV_EOF'
-# ARM (Automatic Ripping Machine) udev rule for docker-compose
-# Triggers ARM wrapper when optical disc is inserted
-ACTION=="change", SUBSYSTEM=="block", ENV{DISK_MEDIA_CHANGE}=="1", ENV{ID_TYPE}=="cd", RUN+="/opt/arm/scripts/docker_arm_wrapper.sh %k"
-UDEV_EOF
+    echo 'ACTION=="change", SUBSYSTEM=="block", KERNEL=="sr[0-9]*", ENV{ID_CDROM_MEDIA}=="1", RUN+="/usr/local/bin/arm-udev-wrapper.sh %k"' > /etc/udev/rules.d/99-arm.rules
 
-    print_success "Udev rule created at /etc/udev/rules.d/99-arm-docker.rules"
+    print_success "Udev rule created at /etc/udev/rules.d/99-arm.rules"
 
     # Reload udev rules
     print_info "Reloading udev rules..."
-    if sudo udevadm control --reload 2>/dev/null; then
+    if udevadm control --reload-rules 2>/dev/null; then
         print_success "Udev rules reloaded"
     else
         print_warning "Could not reload udev rules"
@@ -1087,7 +779,7 @@ UDEV_EOF
 
     print_success "ARM automatic disc detection configured!"
     print_info "Insert a disc to test auto-ripping"
-    print_info "Monitor with: tail -f /var/log/arm-wrapper.log"
+    print_info "Monitor with: docker logs -f arm"
 }
 
 # Validate docker-compose.yml
@@ -1138,66 +830,6 @@ start_services() {
     fi
 }
 
-# Wait for services to be healthy
-wait_for_services() {
-    print_section "Waiting for Services to be Healthy"
-
-    print_info "Waiting for postgres..."
-    local max_attempts=30
-    local attempt=0
-
-    while [ $attempt -lt $max_attempts ]; do
-        if docker exec postgres pg_isready -U homelab &> /dev/null; then
-            print_success "PostgreSQL is healthy"
-            break
-        fi
-        attempt=$((attempt + 1))
-        echo -n "."
-        sleep 2
-    done
-
-    if [ $attempt -eq $max_attempts ]; then
-        print_warning "PostgreSQL health check timed out (may still be starting)"
-    fi
-
-    print_info "Waiting for redis..."
-    attempt=0
-
-    while [ $attempt -lt $max_attempts ]; do
-        if docker exec redis redis-cli --raw incr ping &> /dev/null; then
-            print_success "Redis is healthy"
-            break
-        fi
-        attempt=$((attempt + 1))
-        echo -n "."
-        sleep 2
-    done
-
-    if [ $attempt -eq $max_attempts ]; then
-        print_warning "Redis health check timed out (may still be starting)"
-    fi
-
-    echo ""
-    print_success "Core services are ready"
-}
-
-# Verify databases were created
-verify_databases() {
-    print_section "Verifying Databases"
-
-    print_info "Checking PostgreSQL databases..."
-
-    local databases=("immich")
-
-    for db in "${databases[@]}"; do
-        if docker exec postgres psql -U homelab -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw "$db"; then
-            print_success "Database '$db' exists"
-        else
-            print_warning "Database '$db' not found (may still be initializing)"
-        fi
-    done
-}
-
 # Show service status
 show_status() {
     print_section "Service Status"
@@ -1209,8 +841,6 @@ show_status() {
 show_access_info() {
     print_section "Access Information"
 
-    # Get IPs
-    local ts_ip=$(tailscale ip -4 2>/dev/null || echo "")
     local lan_ip=$(hostname -I | awk '{print $1}')
 
     # Check if Cloudflare is configured
@@ -1230,11 +860,6 @@ show_access_info() {
         echo "  Homarr:         https://homarr.${domain}"
         echo "  Jellyfin:       https://jellyfin.${domain}"
         echo "  Jellyseerr:     https://jellyseerr.${domain}"
-        echo "  Immich:         https://photos.${domain}"
-        if [ "$ENABLE_BOOKS" = true ]; then
-            echo "  Audiobookshelf: https://audiobooks.${domain}"
-            echo "  Calibre-web:    https://books.${domain}"
-        fi
         echo ""
     fi
 
@@ -1242,24 +867,16 @@ show_access_info() {
     echo "  Homarr:         http://${lan_ip}:7575"
     echo "  Jellyfin:       http://${lan_ip}:8096"
     echo "  Jellyseerr:     http://${lan_ip}:5055"
-    echo "  Immich:         http://${lan_ip}:2283"
-    if [ "$ENABLE_BOOKS" = true ]; then
-        echo "  Audiobookshelf: http://${lan_ip}:13378"
-        echo "  Calibre-web:    http://${lan_ip}:8083"
-    fi
     echo "  Sonarr:         http://${lan_ip}:8989"
     echo "  Radarr:         http://${lan_ip}:7878"
+    echo "  Lidarr:         http://${lan_ip}:8686"
     echo "  Prowlarr:       http://${lan_ip}:9696"
     echo "  Bazarr:         http://${lan_ip}:6767"
-    echo "  Lidarr:         http://${lan_ip}:8686"
     echo "  qBittorrent:    http://${lan_ip}:8080"
     echo "  SABnzbd:        http://${lan_ip}:8085"
     echo "  Tdarr:          http://${lan_ip}:8265"
     echo "  ARM:            http://${lan_ip}:8090"
     echo "  Uptime Kuma:    http://${lan_ip}:3001"
-    if [ "$ENABLE_OVOS" = true ]; then
-        echo "  OVOS GUI:       http://${lan_ip}:8484"
-    fi
 
     echo -e "\n${YELLOW}Next Steps:${NC}"
     if [ "$cf_configured" = true ]; then
@@ -1270,11 +887,6 @@ show_access_info() {
         echo "  1. Configure media libraries in *arr apps"
         echo "  2. Configure ARM for Blu-ray ripping: http://${lan_ip}:8090"
         echo "  3. (Optional) Set up Cloudflare Tunnel for public access"
-    fi
-
-    if [ -n "$ts_ip" ]; then
-        echo -e "\n${GREEN}Tailscale Remote Access:${NC}"
-        echo "  Access any service remotely via: http://${ts_ip}:PORT"
     fi
 
     echo -e "\n${YELLOW}Important Files:${NC}"
@@ -1291,16 +903,13 @@ main() {
     check_prerequisites
     select_media_drive
     generate_env
+    create_compose_override
     create_directories
-    setup_tailscale
-    setup_ovos
     setup_arm_udev
     validate_compose
     pull_images
     start_services
-    sleep 10  # Give services a moment to initialize
-    wait_for_services
-    verify_databases
+    sleep 5  # Give services a moment to initialize
     show_status
     show_access_info
 

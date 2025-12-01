@@ -228,14 +228,13 @@ All services should show "Up" status.
 - Jellyseerr: https://jellyseerr.yourdomain.com
 - Homarr: https://homarr.yourdomain.com
 
-**Private Services** (via Tailscale - after configuration):
-- Sonarr: http://homelab-media:8989
-- Radarr: http://homelab-media:7878
-- Prowlarr: http://homelab-media:9696
-- ARM: http://homelab-media:8090
+**Private Services** (LAN only):
+- Sonarr: http://SERVER_IP:8989
+- Radarr: http://SERVER_IP:7878
+- Prowlarr: http://SERVER_IP:9696
+- ARM: http://SERVER_IP:8090
 
-**Or via IP** (temporary):
-- All services accessible via: http://192.168.8.202:PORT
+All services accessible on your local network via `http://SERVER_IP:PORT`
 
 ## Troubleshooting
 
@@ -281,10 +280,9 @@ docker compose up -d
 
 After successful installation:
 
-1. **[Configure Cloudflare Tunnel](networking.md#cloudflare-tunnel)** - For remote access
-2. **[Configure Tailscale](networking.md#tailscale)** - For admin access
-3. **[Set up media libraries](../README.md#initial-setup)** - Configure Sonarr/Radarr
-4. **[Configure ARM](../README.md#blu-ray-ripping)** - Test automatic disc ripping
+1. **[Configure Cloudflare Tunnel](networking.md#cloudflare-tunnel)** - For remote access (optional)
+2. **[Set up media libraries](../README.md#initial-setup)** - Configure Sonarr/Radarr
+3. **[Configure ARM](../README.md#blu-ray-ripping)** - Test automatic disc ripping
 
 ## Backup Strategy
 

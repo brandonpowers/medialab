@@ -6,8 +6,9 @@ Services for monitoring, managing, and optimizing your homelab.
 
 | Service | Purpose | Access | Port |
 |---------|---------|--------|------|
-| **Uptime Kuma** | Service monitoring and uptime tracking | Private (Tailscale) | 3001 |
-| **Tdarr** | Automated video transcoding | Private (Tailscale) | 8265 |
+| **Uptime Kuma** | Service monitoring and uptime tracking | Private (LAN) | 3001 |
+| **Tdarr** | Automated video transcoding | Private (LAN) | 8265 |
+| **ARM** | Automatic Blu-ray/DVD ripping | Private (LAN) | 8090 |
 
 ---
 
@@ -30,7 +31,7 @@ Monitor all your services and get alerts when they go down.
 
 ### Initial Setup
 
-1. **Access:** http://homelab-media:3001 (via Tailscale)
+1. **Access:** http://SERVER_IP:3001
 
 2. **First Time Setup:**
    - Create admin account
@@ -54,43 +55,29 @@ Monitor all your services and get alerts when they go down.
 
 **Public Services:**
 ```
-Jellyfin → http://jellyfin:8096
-Jellyseerr → http://jellyseerr:5055
-Homarr → http://homarr:7575
-Audiobookshelf → http://audiobookshelf:80
-Calibre-Web → http://calibre-web:8083
-Immich → http://immich-server:3001
+Jellyfin    -> http://jellyfin:8096
+Jellyseerr  -> http://jellyseerr:5055
+Homarr      -> http://homarr:7575
 ```
 
 **Admin Services:**
 ```
-Sonarr → http://sonarr:8989
-Radarr → http://radarr:7878
-Lidarr → http://lidarr:8686
-Prowlarr → http://prowlarr:9696
-Bazarr → http://bazarr:6767
-qBittorrent → http://qbittorrent:8080
-SABnzbd → http://sabnzbd:8080
-ARM (Blu-ray Ripper) → http://arm:8090
-```
-
-**Backend Services:**
-```
-PostgreSQL → tcp://postgres:5432
-Redis → tcp://redis:6379
-```
-
-**Network Services:**
-```
-Cloudflare Tunnel → Check tunnel status page
-Tailscale → Check admin console
+Sonarr      -> http://sonarr:8989
+Radarr      -> http://radarr:7878
+Lidarr      -> http://lidarr:8686
+Prowlarr    -> http://prowlarr:9696
+Bazarr      -> http://bazarr:6767
+qBittorrent -> http://qbittorrent:8080
+SABnzbd     -> http://sabnzbd:8080
+ARM         -> http://arm:8080
+Tdarr       -> http://tdarr:8265
 ```
 
 ### Notifications
 
 **Set Up Notifications:**
 
-1. Settings → Notifications
+1. Settings -> Notifications
 2. Click **Add New Notification**
 3. Select notification type
 
@@ -112,10 +99,6 @@ Tailscale → Check admin console
 - Get bot token and chat ID
 - Configure in Uptime Kuma
 
-**Gotify:**
-- Self-hosted notification service
-- Install Gotify separately if desired
-
 4. **Enable Notifications Per Monitor:**
    - Edit monitor
    - Select notification methods
@@ -125,7 +108,7 @@ Tailscale → Check admin console
 
 **Create Public Status Page:**
 
-1. Status Pages → **Add Status Page**
+1. Status Pages -> **Add Status Page**
 2. **Title**: Your Homelab Status
 3. **Slug**: Custom URL path
 4. Select monitors to include
@@ -136,7 +119,7 @@ Tailscale → Check admin console
 6. **Save**
 
 **Share Status Page:**
-- Public URL: `http://homelab-media:3001/status/your-slug`
+- Public URL: `http://SERVER_IP:3001/status/your-slug`
 - Share with family/friends
 - No login required
 - Shows real-time status
@@ -144,7 +127,7 @@ Tailscale → Check admin console
 ### Maintenance Windows
 
 **Schedule Maintenance:**
-1. Maintenance → **Add Maintenance**
+1. Maintenance -> **Add Maintenance**
 2. Set start and end time
 3. Select affected monitors
 4. Notifications paused during maintenance
@@ -158,17 +141,17 @@ Automate video transcoding to save storage space and optimize for streaming.
 ### Features
 
 - Automated H.265 (HEVC) conversion
-- Hardware transcoding (Intel QuickSync, NVIDIA, AMD)
+- Hardware transcoding (Intel QuickSync, NVIDIA, AMD VAAPI)
 - Scheduled transcoding
 - Health checks (find corrupt files)
 - File size reduction (30-50% typical)
 - Configurable quality settings
-- Plugin system
+- Flow-based plugin system
 - Statistics dashboard
 
 ### Initial Setup
 
-1. **Access:** http://homelab-media:8265 (via Tailscale)
+1. **Access:** http://SERVER_IP:8265
 
 2. **First Time Setup:**
    - Complete welcome wizard
@@ -176,7 +159,7 @@ Automate video transcoding to save storage space and optimize for streaming.
 
 3. **Add Libraries:**
 
-   Libraries → **Add Library**
+   Libraries -> **Add Library**
 
    **Movies:**
    - **Source**: `/media/movies`
@@ -192,36 +175,29 @@ Automate video transcoding to save storage space and optimize for streaming.
    - **Schedule**: Overnight
    - **Priority**: Low
 
-4. **Configure Transcode Settings:**
+4. **Create Transcode Flow:**
 
-   Libraries → Select library → **Transcode Options**
+   Flows -> **Add Flow**
 
-   **Plugin Flow:**
-   - **Check Video Codec**: If not H.265 → Transcode
-   - **Transcode to H.265**: Using hardware acceleration
-   - **Check Audio Codec**: Keep audio as-is (or transcode to AAC)
-   - **Health Check**: Remove corrupt files
+   **Recommended Flow for AMD VAAPI:**
+   1. Input File
+   2. Check File Medium (video)
+   3. Begin Command
+   4. Set Video Encoder: `hevc_vaapi`
+      - Preset: fast
+      - Quality: 25
+   5. Set Container: `mkv`
+   6. Execute
+   7. Replace Original File
 
-### Transcode Plugins
-
-**Recommended Plugins:**
-
-**Video:**
-- `Migz-Transcode using GPU` - Hardware H.265 encoding
-- `Migz-Check video codec` - Skip if already H.265
-- `Migz-Set video options` - CRF 23, medium preset
-
-**Audio:**
-- `Migz-Keep one audio stream` - Remove extra audio tracks
-- `Migz-Normalize audio` - Consistent volume
-
-**Health Check:**
-- `Check file health` - Find corrupt files
-- `Check file readability` - Verify file integrity
+5. **Assign Flow to Libraries:**
+   - Libraries -> Select library -> Transcode Options
+   - Enable "Use Flows"
+   - Select your flow
 
 ### Hardware Acceleration
 
-Tdarr uses Intel QuickSync GPU for transcoding:
+Tdarr uses GPU for transcoding (Intel QuickSync or AMD VAAPI):
 
 **Verify GPU Access:**
 ```bash
@@ -229,16 +205,19 @@ docker exec tdarr ls -la /dev/dri/
 # Should see renderD128
 ```
 
-**Enable Hardware Encoding:**
-- Libraries → Transcode Options → Use GPU
-- Plugins → Select GPU plugin
-- **Encoder**: h265_qsv (Intel QuickSync)
+**AMD VAAPI Encoders:**
+- `hevc_vaapi` - H.265/HEVC (recommended)
+- `h264_vaapi` - H.264/AVC
+
+**Intel QuickSync Encoders:**
+- `hevc_qsv` - H.265/HEVC
+- `h264_qsv` - H.264/AVC
 
 ### Scheduling
 
 **Set Transcode Schedule:**
 
-Libraries → Select library → **Schedule**
+Libraries -> Select library -> **Schedule**
 
 **Recommended:**
 - **Start**: 1:00 AM
@@ -266,41 +245,116 @@ Dashboard shows:
 - Transcoded: 5 GB movie (H.265)
 - **Savings: 50%** (5 GB)
 
-### Workers
-
-**Configure Workers:**
-
-Settings → Workers
-
-- **CPU Workers**: 1 (transcoding is intensive)
-- **GPU Workers**: 1 (if GPU available)
-- **Transcode limit**: 1 (avoid overload)
-
 ### Quality Settings
 
-**Constant Rate Factor (CRF):**
-- **CRF 18**: Near lossless (large files)
-- **CRF 23**: Balanced (recommended)
-- **CRF 28**: Smaller files (lower quality)
+**Constant Rate Factor (CRF) / Quality:**
+- **18-20**: Near lossless (large files)
+- **23-25**: Balanced (recommended)
+- **28-30**: Smaller files (lower quality)
 
 **Preset:**
 - **Slow**: Better quality, slower
-- **Medium**: Balanced (recommended)
-- **Fast**: Faster, larger files
+- **Medium**: Balanced
+- **Fast**: Faster, larger files (recommended for hardware encoding)
 
-### Best Practices
+---
 
-1. **Don't transcode everything** - Skip files less than 7 days old
-2. **Test settings** - Transcode one file first, verify quality
-3. **Backup originals** - Keep originals until verified
-4. **Schedule wisely** - Only run overnight
-5. **Monitor stats** - Track space savings
-6. **GPU acceleration** - Much faster than CPU
-7. **CRF 23** - Good balance of quality and size
+## ARM - Automatic Ripping Machine
+
+Automatically rip Blu-ray and DVD discs when inserted.
+
+### Features
+
+- Automatic disc detection via udev
+- MakeMKV for disc ripping
+- Metadata lookup (TMDB/OMDB)
+- Web UI for monitoring
+- Fault-tolerant settings for damaged discs
+
+### Initial Setup
+
+1. **Access:** http://SERVER_IP:8090
+
+2. **Configuration:**
+   The configure-services.sh script sets these automatically:
+   - `COMPLETED_PATH`: `/home/arm/movies/` (outputs to Jellyfin movies folder)
+   - `SKIP_TRANSCODE`: true (Tdarr handles transcoding)
+   - `DELRAWFILES`: false (preserves files on failure)
+   - `MKV_ARGS`: `--minlength=600 -r` (retry on read errors)
+
+3. **TMDB API Key:**
+   - Get free key at: https://www.themoviedb.org/settings/api
+   - Add to `.env` as `TMDB_API_KEY`
+   - Run `./scripts/configure-services.sh` to apply
+
+### Workflow: ARM + Tdarr
+
+```
+1. Insert disc
+       |
+2. ARM auto-detects via udev
+       |
+3. MakeMKV rips to raw MKV
+       |
+4. ARM moves to /media/movies
+       |
+5. Tdarr detects new file
+       |
+6. Tdarr transcodes to H.265 (VAAPI)
+       |
+7. Jellyfin scans and adds to library
+       |
+8. Ready to stream!
+```
+
+### Manual Ripping
+
+If automatic detection doesn't work:
+
+1. Open ARM web UI: http://SERVER_IP:8090
+2. Click "Scan for Disc"
+3. Monitor progress in the UI
+
+### Troubleshooting ARM
+
+**Container keeps restarting:**
+```bash
+# Check permissions
+ls -la data/arm/
+# Should be owned by PUID:PGID (usually 1000:1000)
+
+# Fix if needed
+sudo chown -R 1000:1000 data/arm/
+```
+
+**Disc not detected:**
+```bash
+# Check udev rule exists
+cat /etc/udev/rules.d/99-arm.rules
+
+# Reload udev rules
+sudo udevadm control --reload-rules
+
+# Check ARM logs
+docker compose logs -f arm
+```
+
+**Read errors during rip:**
+- The MKV_ARGS `-r` flag enables retries
+- Some discs may be too damaged to rip
+- Try cleaning the disc
+- Check raw/ folder for partial rips
 
 ---
 
 ## Integration
+
+### ARM -> Tdarr -> Jellyfin
+
+The pipeline is automatic:
+1. ARM rips raw MKV files to `/media/movies`
+2. Tdarr watches the folder and transcodes to H.265
+3. Jellyfin scans and adds to library
 
 ### Uptime Kuma + Notifications
 
@@ -313,13 +367,6 @@ Settings → Workers
 - Share with family
 - See service status at a glance
 - No login required
-
-### Tdarr + Storage Management
-
-**Automatic Optimization:**
-- Reduce storage usage by 30-50%
-- Better streaming performance (smaller files)
-- Consistent quality across library
 
 ---
 
@@ -356,17 +403,17 @@ docker compose logs tdarr
 docker exec tdarr ls -la /dev/dri/
 
 # Check schedule is active
-# Libraries → Schedule → Verify times
+# Libraries -> Schedule -> Verify times
 ```
 
 **Slow transcoding:**
 - Enable hardware acceleration (GPU)
 - Reduce worker count to 1
-- Lower preset (fast instead of slow)
+- Use "fast" preset instead of slow
 - Check CPU usage: `docker stats tdarr`
 
 **Corrupt output files:**
-- Increase CRF (lower quality, more reliable)
+- Increase CRF/Quality value (lower quality, more reliable)
 - Change preset to medium/slow
 - Test hardware encoder
 - Check source files are valid
@@ -395,7 +442,8 @@ docker exec tdarr ls -la /dev/dri/
 
 | Service | URL |
 |---------|-----|
-| Uptime Kuma | http://homelab-media:3001 |
-| Tdarr | http://homelab-media:8265 |
+| Uptime Kuma | http://SERVER_IP:3001 |
+| Tdarr | http://SERVER_IP:8265 |
+| ARM | http://SERVER_IP:8090 |
 
-All services accessible only via Tailscale VPN for security.
+All services accessible on your local network.

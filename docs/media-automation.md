@@ -6,11 +6,11 @@ The *arr stack automates media management, downloading, and quality control.
 
 | Service | Purpose | Access | Port |
 |---------|---------|--------|------|
-| **Sonarr** | TV show automation | Private (Tailscale) | 8989 |
-| **Radarr** | Movie automation | Private (Tailscale) | 7878 |
-| **Lidarr** | Music automation | Private (Tailscale) | 8686 |
-| **Prowlarr** | Indexer management | Private (Tailscale) | 9696 |
-| **Bazarr** | Subtitle automation | Private (Tailscale) | 6767 |
+| **Sonarr** | TV show automation | Private (LAN) | 8989 |
+| **Radarr** | Movie automation | Private (LAN) | 7878 |
+| **Lidarr** | Music automation | Private (LAN) | 8686 |
+| **Prowlarr** | Indexer management | Private (LAN) | 9696 |
+| **Bazarr** | Subtitle automation | Private (LAN) | 6767 |
 | **Recyclarr** | Quality profile sync | CLI only | N/A |
 
 ---
@@ -21,7 +21,7 @@ The *arr stack automates media management, downloading, and quality control.
 
 ### Initial Setup
 
-1. **Access:** http://homelab-media:9696 (via Tailscale)
+1. **Access:** http://SERVER_IP:9696
 
 2. **Add Indexers:**
    - Indexers → Add Indexer
@@ -61,7 +61,7 @@ The *arr stack automates media management, downloading, and quality control.
 
 ### Initial Setup
 
-1. **Access:** http://homelab-media:8989 (via Tailscale)
+1. **Access:** http://SERVER_IP:8989
 
 2. **Configure Download Clients:**
 
@@ -119,7 +119,7 @@ The *arr stack automates media management, downloading, and quality control.
 
 ### Initial Setup
 
-1. **Access:** http://homelab-media:7878 (via Tailscale)
+1. **Access:** http://SERVER_IP:7878
 
 2. **Configure Download Clients:**
 
@@ -154,7 +154,7 @@ The *arr stack automates media management, downloading, and quality control.
 
 ### Initial Setup
 
-1. **Access:** http://homelab-media:8686 (via Tailscale)
+1. **Access:** http://SERVER_IP:8686
 
 2. **Configure Download Clients:**
 
@@ -179,7 +179,7 @@ The *arr stack automates media management, downloading, and quality control.
 
 ### Initial Setup
 
-1. **Access:** http://homelab-media:6767 (via Tailscale)
+1. **Access:** http://SERVER_IP:6767
 
 2. **Connect to Sonarr/Radarr:**
 
@@ -390,10 +390,10 @@ Series/Movies → Select item → Search for subtitles
 
 | Service | URL |
 |---------|-----|
-| Prowlarr | http://homelab-media:9696 |
-| Sonarr | http://homelab-media:8989 |
-| Radarr | http://homelab-media:7878 |
-| Lidarr | http://homelab-media:8686 |
-| Bazarr | http://homelab-media:6767 |
+| Prowlarr | http://SERVER_IP:9696 |
+| Sonarr | http://SERVER_IP:8989 |
+| Radarr | http://SERVER_IP:7878 |
+| Lidarr | http://SERVER_IP:8686 |
+| Bazarr | http://SERVER_IP:6767 |
 
-All services accessible only via Tailscale VPN for security.
+All services accessible on your local network.

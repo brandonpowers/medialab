@@ -21,6 +21,7 @@ declare -A services=(
   ["Jellyfin"]="http://localhost:8096/health"
   ["Sonarr"]="http://localhost:8989/ping"
   ["Radarr"]="http://localhost:7878/ping"
+  ["Lidarr"]="http://localhost:8686/ping"
   ["Prowlarr"]="http://localhost:9696/ping"
   ["Homarr"]="http://localhost:7575"
   ["Jellyseerr"]="http://localhost:5055"

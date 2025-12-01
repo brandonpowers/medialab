@@ -2,6 +2,7 @@
 #
 # configure-services.sh - Automated service configuration
 # Links services together via API calls to eliminate manual setup
+# Focused on video streaming: Jellyfin, *arr stack, ARM, Tdarr
 #
 # Usage: ./scripts/configure-services.sh
 # Run after: setup-homelab.sh completes and all services are running
@@ -205,6 +206,82 @@ wait_for_service "Bazarr" "http://localhost:6767" || print_info "Bazarr will nee
 wait_for_service "SABnzbd" "http://localhost:8085" || print_info "SABnzbd will need manual configuration"
 wait_for_service "Jellyfin" "http://localhost:8096/health" || print_info "Jellyfin will need manual configuration"
 wait_for_service "Jellyseerr" "http://localhost:5055" || print_info "Jellyseerr will need manual configuration"
+
+# ============================================
+# QBITTORRENT CONFIGURATION
+# ============================================
+
+print_section "Configuring qBittorrent"
+
+# Get temporary password from logs
+QBIT_TEMP_PASS=$(docker compose logs qbittorrent 2>/dev/null | grep -oP 'temporary password is provided for this session: \K\S+' | tail -1 || true)
+
+# Show default credentials
+print_info "Default qBittorrent credentials:"
+print_info "  Username: admin"
+if [ -n "$QBIT_TEMP_PASS" ]; then
+    print_info "  Temporary Password: ${QBIT_TEMP_PASS}"
+else
+    print_info "  Password: (check logs or use your custom password)"
+fi
+echo ""
+
+# Prompt for credentials
+read -p "qBittorrent username [admin]: " QBIT_USER
+QBIT_USER=${QBIT_USER:-admin}
+
+if [ -n "$QBIT_TEMP_PASS" ] && [ "$QBIT_USER" = "admin" ]; then
+    read -s -p "qBittorrent password [${QBIT_TEMP_PASS}]: " QBIT_PASS
+    echo ""
+    QBIT_PASS=${QBIT_PASS:-$QBIT_TEMP_PASS}
+else
+    read -s -p "qBittorrent password: " QBIT_PASS
+    echo ""
+fi
+
+if [ -n "$QBIT_PASS" ]; then
+    print_info "Logging into qBittorrent..."
+
+    # Login to get session cookie (Referer header required)
+    QBIT_COOKIE_FILE=$(mktemp)
+    LOGIN_RESPONSE=$(curl -s --max-time 10 -c "$QBIT_COOKIE_FILE" \
+        --header 'Referer: http://localhost:8080' \
+        --data "username=${QBIT_USER}&password=${QBIT_PASS}" \
+        "http://localhost:8080/api/v2/auth/login" 2>/dev/null || echo "FAILED")
+
+    if [ "$LOGIN_RESPONSE" = "Ok." ]; then
+        print_success "Logged into qBittorrent"
+
+        # Configure download paths
+        print_info "Configuring download paths..."
+        curl -s --max-time 10 -b "$QBIT_COOKIE_FILE" \
+            --header 'Referer: http://localhost:8080' \
+            --data 'json={"save_path":"/downloads/complete","temp_path_enabled":true,"temp_path":"/downloads/incomplete"}' \
+            "http://localhost:8080/api/v2/app/setPreferences" \
+            > /dev/null 2>&1 && print_success "Download paths configured" || print_warning "Failed to configure download paths"
+
+        # Create category directories for *arr apps
+        print_info "Creating download categories..."
+        for category in tv movies music; do
+            curl -s --max-time 10 -b "$QBIT_COOKIE_FILE" \
+                --header 'Referer: http://localhost:8080' \
+                --data "category=${category}&savePath=/downloads/complete/${category}" \
+                "http://localhost:8080/api/v2/torrents/createCategory" \
+                > /dev/null 2>&1
+        done
+        print_success "Categories created (tv, movies, music)"
+
+        rm -f "$QBIT_COOKIE_FILE"
+    else
+        rm -f "$QBIT_COOKIE_FILE" 2>/dev/null
+        print_warning "Could not login to qBittorrent - check credentials and configure manually"
+        print_info "Configure at: http://localhost:8080"
+        print_info "Settings → Downloads → Default Save Path: /downloads/complete"
+        print_info "Settings → Downloads → Keep incomplete in: /downloads/incomplete"
+    fi
+else
+    print_warning "No password provided - skipping qBittorrent configuration"
+fi
 
 # ============================================
 # PROWLARR CONFIGURATION
@@ -477,6 +554,32 @@ else
             "configContract": "QBittorrentSettings",
             "tags": []
         }' > /dev/null && print_success "qBittorrent added" || print_warning "qBittorrent may already exist"
+
+    # Add SABnzbd if configured
+    if [ -n "${SABNZBD_API_KEY:-}" ]; then
+        print_info "Adding SABnzbd to Lidarr..."
+        curl -s -X POST "http://localhost:8686/api/v1/downloadclient" \
+            -H "X-Api-Key: $LIDARR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"enable\": true,
+                \"protocol\": \"usenet\",
+                \"priority\": 1,
+                \"removeCompletedDownloads\": true,
+                \"removeFailedDownloads\": true,
+                \"name\": \"SABnzbd\",
+                \"fields\": [
+                    {\"name\": \"host\", \"value\": \"sabnzbd\"},
+                    {\"name\": \"port\", \"value\": 8080},
+                    {\"name\": \"apiKey\", \"value\": \"${SABNZBD_API_KEY}\"},
+                    {\"name\": \"musicCategory\", \"value\": \"music\"}
+                ],
+                \"implementationName\": \"SABnzbd\",
+                \"implementation\": \"Sabnzbd\",
+                \"configContract\": \"SabnzbdSettings\",
+                \"tags\": []
+            }" > /dev/null && print_success "SABnzbd added" || print_warning "SABnzbd may already exist"
+    fi
 fi
 
 # ============================================
@@ -859,6 +962,409 @@ if [ -n "$SONARR_API_KEY" ] && [ -n "$RADARR_API_KEY" ]; then
 fi
 
 # ============================================
+# JELLYSEERR CONFIGURATION
+# ============================================
+
+print_section "Configuring Jellyseerr"
+
+JELLYSEERR_SETTINGS="${PROJECT_ROOT}/data/jellyseerr/config/settings.json"
+
+if [ -f "$JELLYSEERR_SETTINGS" ] && command -v jq &> /dev/null; then
+    # Get Jellyseerr API key from settings
+    JELLYSEERR_API_KEY=$(jq -r '.main.apiKey' "$JELLYSEERR_SETTINGS" 2>/dev/null || true)
+
+    if [ -n "$JELLYSEERR_API_KEY" ] && [ "$JELLYSEERR_API_KEY" != "null" ]; then
+        # Check if Radarr is already configured
+        EXISTING_RADARR=$(curl -s -H "X-Api-Key: $JELLYSEERR_API_KEY" \
+            "http://localhost:5055/api/v1/settings/radarr" 2>/dev/null || echo "[]")
+
+        if [ "$EXISTING_RADARR" = "[]" ] && [ -n "$RADARR_API_KEY" ]; then
+            print_info "Adding Radarr to Jellyseerr..."
+
+            # Get Radarr quality profile ID for HD-1080p
+            RADARR_PROFILE_ID=$(curl -s -H "X-Api-Key: $RADARR_API_KEY" \
+                "http://localhost:7878/api/v3/qualityprofile" 2>/dev/null | \
+                jq -r '.[] | select(.name == "HD-1080p") | .id' || echo "1")
+            RADARR_PROFILE_ID=${RADARR_PROFILE_ID:-1}
+
+            curl -s -X POST -H "X-Api-Key: $JELLYSEERR_API_KEY" \
+                -H "Content-Type: application/json" \
+                "http://localhost:5055/api/v1/settings/radarr" \
+                -d "{
+                    \"name\": \"Radarr\",
+                    \"hostname\": \"radarr\",
+                    \"port\": 7878,
+                    \"apiKey\": \"${RADARR_API_KEY}\",
+                    \"useSsl\": false,
+                    \"baseUrl\": \"\",
+                    \"activeProfileId\": ${RADARR_PROFILE_ID},
+                    \"activeProfileName\": \"HD-1080p\",
+                    \"activeDirectory\": \"/media/movies\",
+                    \"is4k\": false,
+                    \"minimumAvailability\": \"released\",
+                    \"tags\": [],
+                    \"isDefault\": true,
+                    \"syncEnabled\": true,
+                    \"preventSearch\": false,
+                    \"tagRequests\": false
+                }" > /dev/null 2>&1 && print_success "Radarr added to Jellyseerr" || print_warning "Failed to add Radarr"
+        else
+            print_info "Radarr already configured in Jellyseerr"
+        fi
+
+        # Check if Sonarr is already configured
+        EXISTING_SONARR=$(curl -s -H "X-Api-Key: $JELLYSEERR_API_KEY" \
+            "http://localhost:5055/api/v1/settings/sonarr" 2>/dev/null || echo "[]")
+
+        if [ "$EXISTING_SONARR" = "[]" ] && [ -n "$SONARR_API_KEY" ]; then
+            print_info "Adding Sonarr to Jellyseerr..."
+
+            # Get Sonarr quality profile ID for WEB-1080p
+            SONARR_PROFILE_ID=$(curl -s -H "X-Api-Key: $SONARR_API_KEY" \
+                "http://localhost:8989/api/v3/qualityprofile" 2>/dev/null | \
+                jq -r '.[] | select(.name == "WEB-1080p") | .id' || echo "1")
+            SONARR_PROFILE_ID=${SONARR_PROFILE_ID:-1}
+
+            curl -s -X POST -H "X-Api-Key: $JELLYSEERR_API_KEY" \
+                -H "Content-Type: application/json" \
+                "http://localhost:5055/api/v1/settings/sonarr" \
+                -d "{
+                    \"name\": \"Sonarr\",
+                    \"hostname\": \"sonarr\",
+                    \"port\": 8989,
+                    \"apiKey\": \"${SONARR_API_KEY}\",
+                    \"useSsl\": false,
+                    \"baseUrl\": \"\",
+                    \"activeProfileId\": ${SONARR_PROFILE_ID},
+                    \"activeProfileName\": \"WEB-1080p\",
+                    \"activeDirectory\": \"/media/tv\",
+                    \"activeAnimeProfileId\": ${SONARR_PROFILE_ID},
+                    \"activeAnimeProfileName\": \"WEB-1080p\",
+                    \"activeAnimeDirectory\": \"/media/tv\",
+                    \"tags\": [],
+                    \"animeTags\": [],
+                    \"is4k\": false,
+                    \"isDefault\": true,
+                    \"enableSeasonFolders\": true,
+                    \"syncEnabled\": true,
+                    \"preventSearch\": false,
+                    \"tagRequests\": false
+                }" > /dev/null 2>&1 && print_success "Sonarr added to Jellyseerr" || print_warning "Failed to add Sonarr"
+        else
+            print_info "Sonarr already configured in Jellyseerr"
+        fi
+    else
+        print_warning "Jellyseerr API key not found - complete the setup wizard first"
+        print_info "Visit http://localhost:5055 to complete Jellyseerr setup"
+    fi
+else
+    print_warning "Jellyseerr settings not found or jq not installed"
+    print_info "Configure Jellyseerr manually at http://localhost:5055"
+fi
+
+# ============================================
+# ARM CONFIGURATION
+# ============================================
+
+print_section "Configuring ARM (Automatic Ripping Machine)"
+
+ARM_CONFIG="${PROJECT_ROOT}/data/arm/config/arm.yaml"
+
+if [ -f "$ARM_CONFIG" ]; then
+    print_info "Updating ARM configuration..."
+
+    # Fix COMPLETED_PATH to output directly to movies folder
+    if grep -q 'COMPLETED_PATH: "/home/arm/media/completed/"' "$ARM_CONFIG"; then
+        sed -i 's|COMPLETED_PATH: "/home/arm/media/completed/"|COMPLETED_PATH: "/home/arm/movies/"|' "$ARM_CONFIG"
+        print_success "COMPLETED_PATH updated to /home/arm/movies/"
+    elif grep -q 'COMPLETED_PATH: "/home/arm/movies/"' "$ARM_CONFIG"; then
+        print_info "COMPLETED_PATH already set correctly"
+    else
+        print_warning "COMPLETED_PATH has custom value - skipping"
+    fi
+
+    # Add TMDB API key if available and not already set
+    if [ -n "${TMDB_API_KEY:-}" ]; then
+        if grep -q 'TMDB_API_KEY: ""' "$ARM_CONFIG"; then
+            sed -i "s|TMDB_API_KEY: \"\"|TMDB_API_KEY: \"${TMDB_API_KEY}\"|" "$ARM_CONFIG"
+            print_success "TMDB_API_KEY added to ARM config"
+        elif grep -q "TMDB_API_KEY: \"${TMDB_API_KEY}\"" "$ARM_CONFIG"; then
+            print_info "TMDB_API_KEY already configured"
+        else
+            print_info "TMDB_API_KEY already has a value"
+        fi
+
+        # Switch to TMDB as metadata provider (more reliable than OMDB)
+        if grep -q 'METADATA_PROVIDER: "omdb"' "$ARM_CONFIG"; then
+            sed -i 's|METADATA_PROVIDER: "omdb"|METADATA_PROVIDER: "tmdb"|' "$ARM_CONFIG"
+            print_success "Switched metadata provider to TMDB"
+        fi
+    else
+        print_warning "No TMDB_API_KEY in .env - ARM may have trouble identifying discs"
+        print_info "Get a free API key at: https://www.themoviedb.org/settings/api"
+    fi
+
+    # Fault tolerance: Skip transcoding (let Tdarr handle it)
+    if grep -q 'SKIP_TRANSCODE: false' "$ARM_CONFIG"; then
+        sed -i 's|SKIP_TRANSCODE: false|SKIP_TRANSCODE: true|' "$ARM_CONFIG"
+        print_success "SKIP_TRANSCODE enabled (Tdarr will handle transcoding)"
+    fi
+
+    # Fault tolerance: Keep raw files on failure for recovery
+    if grep -q 'DELRAWFILES: true' "$ARM_CONFIG"; then
+        sed -i 's|DELRAWFILES: true|DELRAWFILES: false|' "$ARM_CONFIG"
+        print_success "DELRAWFILES disabled (preserves files on failure)"
+    fi
+
+    # Fault tolerance: Add MakeMKV retry arguments for read errors
+    if grep -q 'MKV_ARGS: ""' "$ARM_CONFIG"; then
+        sed -i 's|MKV_ARGS: ""|MKV_ARGS: "--minlength=600 -r"|' "$ARM_CONFIG"
+        print_success "MKV_ARGS set with retry flag for read errors"
+    fi
+
+    # Restart ARM to apply changes
+    print_info "Restarting ARM container..."
+    docker restart arm > /dev/null 2>&1 && print_success "ARM restarted" || print_warning "Failed to restart ARM"
+else
+    print_warning "ARM config not found at $ARM_CONFIG"
+    print_info "ARM will be configured on first run"
+fi
+
+# ============================================
+# TDARR CONFIGURATION
+# ============================================
+
+print_section "Configuring Tdarr (Transcoding)"
+
+# Wait for Tdarr to be ready
+wait_for_service "Tdarr" "http://localhost:8265" || {
+    print_warning "Tdarr not ready - skipping configuration"
+    print_info "Configure manually at http://localhost:8265"
+}
+
+# Generate schedule JSON (all hours enabled)
+generate_tdarr_schedule() {
+    local schedule="["
+    local first=true
+    for day in Sun Mon Tue Wed Thur Fri Sat; do
+        for hour in 00 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 21 22 23; do
+            local next_hour=$(printf "%02d" $(( (10#$hour + 1) % 24 )))
+            if [ "$first" = true ]; then
+                first=false
+            else
+                schedule+=","
+            fi
+            schedule+="{\"_id\":\"${day}:${hour}-${next_hour}\",\"checked\":true}"
+        done
+    done
+    schedule+="]"
+    echo "$schedule"
+}
+
+# Check if Movies library already exists
+EXISTING_LIBRARIES=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
+    -H "Content-Type: application/json" \
+    -d '{"data": {"collection":"LibrarySettingsJSONDB","mode":"getAll"}}' 2>/dev/null || echo "{}")
+
+TDARR_SCHEDULE=$(generate_tdarr_schedule)
+
+if echo "$EXISTING_LIBRARIES" | grep -q '"name":"Movies"'; then
+    print_info "Tdarr Movies library already exists"
+else
+    print_info "Creating Tdarr Movies library..."
+
+    # Generate a unique library ID
+    LIBRARY_ID=$(openssl rand -hex 5)
+
+    # Create the Movies library via API with all required fields
+    TDARR_RESPONSE=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"data\": {
+                \"collection\": \"LibrarySettingsJSONDB\",
+                \"mode\": \"insert\",
+                \"docID\": \"${LIBRARY_ID}\",
+                \"obj\": {
+                    \"_id\": \"${LIBRARY_ID}\",
+                    \"name\": \"Movies\",
+                    \"priority\": 0,
+                    \"folder\": \"/media/movies\",
+                    \"foldersToIgnore\": \"\",
+                    \"foldersToIgnoreCaseInsensitive\": false,
+                    \"folderWatchScanInterval\": 30,
+                    \"scannerThreadCount\": 2,
+                    \"cache\": \"/temp\",
+                    \"output\": \"\",
+                    \"folderToFolderConversion\": false,
+                    \"folderToFolderConversionDeleteSource\": false,
+                    \"folderToFolderRecordHistory\": true,
+                    \"copyIfConditionsMet\": false,
+                    \"container\": \".mkv\",
+                    \"containerFilter\": \"mkv,mp4,mov,m4v,mpg,mpeg,avi,flv,webm,wmv,vob,evo,iso,m2ts,ts\",
+                    \"createdAt\": $(date +%s)000,
+                    \"folderWatching\": true,
+                    \"useFsEvents\": false,
+                    \"scheduledScanFindNew\": false,
+                    \"processLibrary\": true,
+                    \"processTranscodes\": true,
+                    \"processHealthChecks\": true,
+                    \"scanOnStart\": false,
+                    \"exifToolScan\": true,
+                    \"mediaInfoScan\": true,
+                    \"ffprobeShowData\": false,
+                    \"isDirectoryLibrary\": false,
+                    \"closedCaptionScan\": false,
+                    \"scanButtons\": true,
+                    \"scanFound\": \"Files found:0\",
+                    \"navItemSelected\": \"navSourceFolder\",
+                    \"pluginIDs\": [],
+                    \"pluginCommunity\": true,
+                    \"handbrake\": true,
+                    \"ffmpeg\": false,
+                    \"handbrakescan\": true,
+                    \"ffmpegscan\": false,
+                    \"preset\": \"-Z \\\"Very Fast 1080p30\\\"\",
+                    \"decisionMaker\": {
+                        \"settingsPlugin\": false,
+                        \"settingsFlows\": true,
+                        \"settingsVideo\": false,
+                        \"videoExcludeSwitch\": true,
+                        \"video_codec_names_exclude\": [{\"codec\":\"hevc\",\"checked\":false},{\"codec\":\"h264\",\"checked\":true}],
+                        \"video_size_range_include\": {\"min\":0,\"max\":100000},
+                        \"video_height_range_include\": {\"min\":0,\"max\":3000},
+                        \"video_width_range_include\": {\"min\":0,\"max\":4000},
+                        \"settingsAudio\": false,
+                        \"audioExcludeSwitch\": true,
+                        \"audio_codec_names_exclude\": [{\"codec\":\"mp3\",\"checked\":true},{\"codec\":\"aac\",\"checked\":false}],
+                        \"audio_size_range_include\": {\"min\":0,\"max\":10}
+                    },
+                    \"schedule\": ${TDARR_SCHEDULE},
+                    \"totalHealthCheckCount\": 0,
+                    \"totalTranscodeCount\": 0,
+                    \"sizeDiff\": 0,
+                    \"holdNewFiles\": false,
+                    \"holdFor\": 3600,
+                    \"holdForDisplayUnit\": \"hours\",
+                    \"pluginStackOverview\": true,
+                    \"filterResolutionsSkip\": \"\",
+                    \"filterCodecsSkip\": \"\",
+                    \"filterContainersSkip\": \"\",
+                    \"processPluginsSequentially\": true
+                }
+            }
+        }" 2>/dev/null)
+
+    if echo "$TDARR_RESPONSE" | grep -q "\"_id\":\"${LIBRARY_ID}\""; then
+        print_success "Movies library created with folder watching enabled"
+    else
+        print_warning "Could not create Movies library via API"
+        print_info "Create manually at http://localhost:8265"
+    fi
+fi
+
+# Check for TV library
+if echo "$EXISTING_LIBRARIES" | grep -q '"name":"TV Shows"'; then
+    print_info "Tdarr TV Shows library already exists"
+else
+    print_info "Creating Tdarr TV Shows library..."
+
+    TV_LIBRARY_ID=$(openssl rand -hex 5)
+
+    TDARR_TV_RESPONSE=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"data\": {
+                \"collection\": \"LibrarySettingsJSONDB\",
+                \"mode\": \"insert\",
+                \"docID\": \"${TV_LIBRARY_ID}\",
+                \"obj\": {
+                    \"_id\": \"${TV_LIBRARY_ID}\",
+                    \"name\": \"TV Shows\",
+                    \"priority\": 1,
+                    \"folder\": \"/media/tv\",
+                    \"foldersToIgnore\": \"\",
+                    \"foldersToIgnoreCaseInsensitive\": false,
+                    \"folderWatchScanInterval\": 30,
+                    \"scannerThreadCount\": 2,
+                    \"cache\": \"/temp\",
+                    \"output\": \"\",
+                    \"folderToFolderConversion\": false,
+                    \"folderToFolderConversionDeleteSource\": false,
+                    \"folderToFolderRecordHistory\": true,
+                    \"copyIfConditionsMet\": false,
+                    \"container\": \".mkv\",
+                    \"containerFilter\": \"mkv,mp4,mov,m4v,mpg,mpeg,avi,flv,webm,wmv,vob,evo,iso,m2ts,ts\",
+                    \"createdAt\": $(date +%s)000,
+                    \"folderWatching\": true,
+                    \"useFsEvents\": false,
+                    \"scheduledScanFindNew\": false,
+                    \"processLibrary\": true,
+                    \"processTranscodes\": true,
+                    \"processHealthChecks\": true,
+                    \"scanOnStart\": false,
+                    \"exifToolScan\": true,
+                    \"mediaInfoScan\": true,
+                    \"ffprobeShowData\": false,
+                    \"isDirectoryLibrary\": false,
+                    \"closedCaptionScan\": false,
+                    \"scanButtons\": true,
+                    \"scanFound\": \"\",
+                    \"navItemSelected\": \"navSourceFolder\",
+                    \"pluginIDs\": [],
+                    \"pluginCommunity\": true,
+                    \"handbrake\": true,
+                    \"ffmpeg\": false,
+                    \"handbrakescan\": true,
+                    \"ffmpegscan\": false,
+                    \"preset\": \"-Z \\\"Very Fast 1080p30\\\"\",
+                    \"decisionMaker\": {
+                        \"settingsPlugin\": false,
+                        \"settingsFlows\": true,
+                        \"settingsVideo\": false,
+                        \"videoExcludeSwitch\": true,
+                        \"video_codec_names_exclude\": [{\"codec\":\"hevc\",\"checked\":false},{\"codec\":\"h264\",\"checked\":true}],
+                        \"video_size_range_include\": {\"min\":0,\"max\":100000},
+                        \"video_height_range_include\": {\"min\":0,\"max\":3000},
+                        \"video_width_range_include\": {\"min\":0,\"max\":4000},
+                        \"settingsAudio\": false,
+                        \"audioExcludeSwitch\": true,
+                        \"audio_codec_names_exclude\": [{\"codec\":\"mp3\",\"checked\":true},{\"codec\":\"aac\",\"checked\":false}],
+                        \"audio_size_range_include\": {\"min\":0,\"max\":10}
+                    },
+                    \"schedule\": ${TDARR_SCHEDULE},
+                    \"totalHealthCheckCount\": 0,
+                    \"totalTranscodeCount\": 0,
+                    \"sizeDiff\": 0,
+                    \"holdNewFiles\": false,
+                    \"holdFor\": 3600,
+                    \"holdForDisplayUnit\": \"hours\",
+                    \"pluginStackOverview\": true,
+                    \"filterResolutionsSkip\": \"\",
+                    \"filterCodecsSkip\": \"\",
+                    \"filterContainersSkip\": \"\",
+                    \"processPluginsSequentially\": true
+                }
+            }
+        }" 2>/dev/null)
+
+    if echo "$TDARR_TV_RESPONSE" | grep -q "\"_id\":\"${TV_LIBRARY_ID}\""; then
+        print_success "TV Shows library created with folder watching enabled"
+    else
+        print_warning "Could not create TV Shows library via API"
+    fi
+fi
+
+print_info ""
+print_info "Tdarr libraries configured. To complete setup:"
+print_info "  1. Open http://localhost:8265"
+print_info "  2. Create a flow with: Input File → Check File Medium → Begin Command"
+print_info "     → Set Video Encoder (hevc_vaapi for AMD) → Set Container (mkv)"
+print_info "     → Execute → Replace Original File"
+print_info "  3. Assign the flow to each library in Transcode Options"
+print_info ""
+print_success "ARM will output raw MKV files → Tdarr will transcode automatically"
+
+# ============================================
 # SUMMARY
 # ============================================
 
@@ -870,6 +1376,8 @@ print_success "✓ Sonarr - TV shows with download clients"
 print_success "✓ Radarr - Movies with download clients"
 print_success "✓ Lidarr - Music with download clients"
 print_success "✓ Bazarr - Subtitles (may need manual configuration)"
+print_success "✓ ARM - Blu-ray/DVD ripping (fault-tolerant, raw output)"
+print_success "✓ Tdarr - Automatic transcoding with folder watching"
 print_success "✓ Prowlarr synced to *arr apps"
 [ -n "$SONARR_API_KEY" ] && [ -n "$RADARR_API_KEY" ] && print_success "✓ Quality profiles synced via Recyclarr"
 
@@ -877,13 +1385,25 @@ echo ""
 print_info "API Keys saved to .env:"
 [ -n "$SONARR_API_KEY" ] && print_info "  SONARR_API_KEY=${SONARR_API_KEY}"
 [ -n "$RADARR_API_KEY" ] && print_info "  RADARR_API_KEY=${RADARR_API_KEY}"
+[ -n "$LIDARR_API_KEY" ] && print_info "  LIDARR_API_KEY=${LIDARR_API_KEY}"
 
 echo ""
 print_info "Still need manual configuration:"
 if [ -z "$(grep "^NZBGEEK_API_KEY=" "$PROJECT_ROOT/.env" 2>/dev/null | cut -d'=' -f2)" ]; then
     print_warning "⚠ Prowlarr: Add indexers at http://localhost:9696"
 fi
-print_warning "⚠ qBittorrent: Change default password (admin/adminadmin) at http://localhost:8080"
+
+# Get qBittorrent temporary password from logs
+QBIT_TEMP_PASS=$(docker compose logs qbittorrent 2>/dev/null | grep -oP 'temporary password is provided for this session: \K\S+' | tail -1 || true)
+if [ -n "$QBIT_TEMP_PASS" ]; then
+    print_warning "⚠ qBittorrent: Change password at http://localhost:8080"
+    print_info "    Username: admin"
+    print_info "    Temporary Password: ${QBIT_TEMP_PASS}"
+    print_info "    Change under: Settings → WebUI → Authentication"
+else
+    print_warning "⚠ qBittorrent: Change default password at http://localhost:8080"
+fi
+
 if [ -z "$(grep "^NEWSHOSTING_USER=" "$PROJECT_ROOT/.env" 2>/dev/null | cut -d'=' -f2)" ]; then
     print_warning "⚠ SABnzbd: Add Usenet servers at http://localhost:8085"
 fi

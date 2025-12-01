@@ -58,9 +58,9 @@ cd /opt/homelab
 
 This will:
 - Create all data directories
-- Generate `.env` file with secure passwords
-- Start all 31 Docker services
-- Wait for databases to be healthy
+- Generate `.env` file with secure encryption key
+- Start all 16 Docker services
+- Wait for services to initialize
 
 ### Step 2: Wait for Services to Start
 
@@ -120,9 +120,6 @@ This will:
      - Movies: `/media/movies`
      - TV Shows: `/media/tv`
      - Music: `/media/music`
-     - Audiobooks: `/media/audiobooks`
-     - Books: `/media/books`
-     - Photos: `/media/photos`
 
 5. **Jellyseerr - Link to Jellyfin**
    - URL: `http://SERVER_IP:5055`
@@ -130,20 +127,12 @@ This will:
    - Configure Sonarr connection (API key already in `.env`)
    - Configure Radarr connection (API key already in `.env`)
 
-6. **Cloudflare Tunnel - Configure Routes**
+6. **Cloudflare Tunnel - Configure Routes** (Optional)
    - See: [Networking Guide](networking.md#cloudflare-tunnel-setup)
    - Add public hostnames for:
      - Jellyfin
      - Jellyseerr
      - Homarr
-     - Audiobookshelf
-     - Calibre-Web
-     - Immich
-
-7. **Tailscale - Remote Access**
-   - Installed on host during setup (not as Docker container)
-   - Authenticate when prompted by setup script
-   - Verify connection: `tailscale status`
 
 ## Environment Variables
 
@@ -155,11 +144,6 @@ TZ=America/Chicago
 PUID=1000
 PGID=1000
 MEDIA_ROOT=/mnt/media
-
-# Database & Cache (auto-generated secure passwords)
-DB_USER=homelab
-DB_PASSWORD=<generated>
-REDIS_PASSWORD=<generated>
 
 # Homarr (auto-generated encryption key)
 HOMARR_ENCRYPTION_KEY=<generated>
@@ -174,8 +158,6 @@ CLOUDFLARE_TUNNEL_TOKEN=eyJ...
 # API Keys
 TMDB_API_KEY=<your_key>
 ```
-
-> **Note:** Tailscale is installed on the host (not as a Docker container), so no auth key is needed in `.env`. The setup script will prompt to install and authenticate Tailscale interactively.
 
 ### Optional Variables (Auto-Populated by Script)
 
@@ -342,7 +324,7 @@ After automated configuration:
 1. **[Add Indexers to Prowlarr](media-automation.md#prowlarr-setup)** - Required for content discovery
 2. **[Configure Jellyfin Libraries](media-streaming.md#jellyfin-setup)** - Point to media folders
 3. **[Link Jellyseerr](media-streaming.md#jellyseerr-setup)** - User-friendly request system
-4. **[Set Up Remote Access](networking.md)** - Cloudflare Tunnel and Tailscale
+4. **[Set Up Remote Access](networking.md)** - Cloudflare Tunnel (optional)
 5. **[Test ARM Disc Ripping](../README.md#blu-ray-ripping)** - Insert a disc to verify
 
 ## Benefits of Automation

@@ -406,10 +406,10 @@ Add custom styling:
 
 ## Common Access URLs
 
-| Service | Public URL | Private URL (Tailscale) |
-|---------|-----------|------------------------|
-| Jellyfin | https://jellyfin.yourdomain.com | http://homelab-media:8096 |
-| Jellyseerr | https://jellyseerr.yourdomain.com | http://homelab-media:5055 |
-| Homarr | https://homarr.yourdomain.com | http://homelab-media:7575 |
+| Service | Public URL | LAN URL |
+|---------|-----------|---------|
+| Jellyfin | https://jellyfin.yourdomain.com | http://SERVER_IP:8096 |
+| Jellyseerr | https://jellyseerr.yourdomain.com | http://SERVER_IP:5055 |
+| Homarr | https://homarr.yourdomain.com | http://SERVER_IP:7575 |
 
-All services also accessible on local network at `http://CT-IP:PORT`
+All services accessible on your local network or remotely via Cloudflare Tunnel.
