@@ -472,155 +472,140 @@ backup_env() {
 }
 
 # Generate .env file
-generate_env() {
-    print_section "Generating Environment Configuration"
-
-    # Check if .env exists and ask user
+# Helper function to get a value from .env file
+get_env_value() {
+    local key="$1"
     if [ -f .env ]; then
-        echo -n "⚠ .env already exists. Overwrite? (y/N): "
-        read -r response
-        if [[ ! "$response" =~ ^[Yy]$ ]]; then
-            print_info "Skipping .env generation"
-            return
-        fi
-        backup_env
+        grep "^${key}=" .env 2>/dev/null | cut -d'=' -f2- | head -1
     fi
+}
 
-    print_info "Generating secure passwords and tokens..."
+# Helper function to set a value in .env file (only if not already set or if forced)
+set_env_value() {
+    local key="$1"
+    local value="$2"
+    local force="${3:-false}"
 
-    # Generate all passwords and tokens
-    local HOMARR_ENCRYPTION_KEY=$(openssl rand -hex 32)
-
-    print_success "Generated Homarr encryption key"
-
-    # Prompt for required values
-    print_info "\nPlease provide the following information:"
-
-    echo -n "Timezone (default: America/Chicago): "
-    read -r TZ
-    TZ=${TZ:-America/Chicago}
-
-    # Auto-detect PUID and PGID from the user running sudo
-    if [ -n "${SUDO_USER:-}" ]; then
-        PUID=$(id -u "$SUDO_USER")
-        PGID=$(id -g "$SUDO_USER")
-        print_success "Auto-detected PUID=$PUID, PGID=$PGID (from user: $SUDO_USER)"
-    else
-        PUID=$(id -u)
-        PGID=$(id -g)
-        print_success "Auto-detected PUID=$PUID, PGID=$PGID"
-    fi
-
-    # Use the selected media path from drive selection, or prompt for manual entry
-    if [ -n "${SELECTED_MEDIA_PATH:-}" ]; then
-        MEDIA_ROOT="$SELECTED_MEDIA_PATH"
-        print_info "Using selected media path: $MEDIA_ROOT"
-    else
-        echo -n "Media root path (default: /mnt/media): "
-        read -r MEDIA_ROOT
-        MEDIA_ROOT=${MEDIA_ROOT:-/mnt/media}
-        # Ensure media directory structure exists for manually entered paths
-        create_media_structure "$MEDIA_ROOT"
-    fi
-
-    echo -n "Your email address: "
-    read -r EMAIL
-    if [ -z "$EMAIL" ]; then
-        print_warning "No email provided - some services may require this later"
-        EMAIL=""
-    fi
-
-    # Ask about Cloudflare Tunnel for public access
-    echo ""
-    echo -n "Do you want to set up a domain with Cloudflare Tunnel for public access? (y/N): "
-    read -r USE_CLOUDFLARE
-
-    if [[ "$USE_CLOUDFLARE" =~ ^[Yy]$ ]]; then
-        echo -n "Domain name: "
-        read -r DOMAIN
-
-        echo ""
-        print_info "To get your Cloudflare Tunnel token:"
-        echo "  1. Go to: https://one.dash.cloudflare.com/"
-        echo "  2. Navigate to: Zero Trust → Networks → Tunnels"
-        echo "  3. Create a tunnel and copy the token"
-        echo ""
-        echo -n "Cloudflare Tunnel Token: "
-        read -r CLOUDFLARE_TUNNEL_TOKEN
-
-        if [ -z "$CLOUDFLARE_TUNNEL_TOKEN" ]; then
-            print_warning "No token provided - you can add it to .env later"
-            CLOUDFLARE_TUNNEL_TOKEN="your_tunnel_token_here"
-        fi
-    else
-        print_info "Skipping Cloudflare Tunnel setup"
-        print_info "Services will only be accessible on your local network"
-        DOMAIN=""
-        CLOUDFLARE_TUNNEL_TOKEN=""
-    fi
-
-
-    echo ""
-    print_info "TMDB API Key is used by Jellyseerr for media discovery"
-    echo "  Get one free at: https://www.themoviedb.org/settings/api"
-    echo ""
-    echo -n "TMDB API Key (press Enter to skip): "
-    read -r TMDB_API_KEY
-    if [ -z "$TMDB_API_KEY" ]; then
-        print_warning "No TMDB key - Jellyseerr will need this configured later"
-        TMDB_API_KEY=""
-    fi
-
-    # Create .env file
-    cat > .env << EOF
+    if [ ! -f .env ]; then
+        # Create .env with header if it doesn't exist
+        cat > .env << EOF
 # ============================================
 # HOMELAB ENVIRONMENT CONFIGURATION
 # Generated: $(date)
 # Video Streaming Focus
 # ============================================
 
-# System Configuration
-TZ=${TZ}
-PUID=${PUID}
-PGID=${PGID}
-MEDIA_ROOT=${MEDIA_ROOT}
-EMAIL=${EMAIL}
-
-# Homarr v1.0 (Auto-generated)
-HOMARR_ENCRYPTION_KEY=${HOMARR_ENCRYPTION_KEY}
-
-# API Keys
-TMDB_API_KEY=${TMDB_API_KEY}
-
-# Recyclarr API Keys (configure after services are running)
-SONARR_API_KEY=your_sonarr_api_key_here
-RADARR_API_KEY=your_radarr_api_key_here
-
-# SABnzbd API Key (optional - configure after SABnzbd is set up)
-SABNZBD_API_KEY=
-EOF
-
-    # Add Cloudflare section if configured
-    if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ] && [ "$CLOUDFLARE_TUNNEL_TOKEN" != "your_tunnel_token_here" ]; then
-        cat >> .env << EOF
-
-# Cloudflare Tunnel (Public Access)
-DOMAIN=${DOMAIN}
-CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
-EOF
-    elif [ -n "$DOMAIN" ]; then
-        cat >> .env << EOF
-
-# Cloudflare Tunnel (Not configured - add token to enable)
-DOMAIN=${DOMAIN}
-CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN:-your_tunnel_token_here}
 EOF
     fi
 
-    print_success ".env file created successfully"
+    local existing=$(get_env_value "$key")
 
-    # Save passwords to a secure file for reference
-    cat > .passwords.txt << EOF
+    if [ -z "$existing" ]; then
+        # Key doesn't exist, append it
+        echo "${key}=${value}" >> .env
+        return 0
+    elif [ "$force" = "true" ]; then
+        # Force update - replace existing value
+        sed -i "s|^${key}=.*|${key}=${value}|" .env
+        return 0
+    fi
+    # Key exists and not forcing, skip
+    return 1
+}
+
+generate_env() {
+    print_section "Generating Environment Configuration"
+
+    local is_update=false
+
+    # Check if .env exists
+    if [ -f .env ]; then
+        is_update=true
+        print_info "Existing .env found - will preserve existing values"
+        print_info "Only missing variables will be added"
+        echo ""
+
+        # Source existing values so we can use them
+        set -a
+        source .env
+        set +a
+
+        backup_env
+    fi
+
+    # --- System Configuration ---
+
+    # Timezone
+    local existing_tz=$(get_env_value "TZ")
+    if [ -z "$existing_tz" ]; then
+        echo -n "Timezone (default: America/Chicago): "
+        read -r TZ
+        TZ=${TZ:-America/Chicago}
+        set_env_value "TZ" "$TZ"
+        print_success "Set TZ=$TZ"
+    else
+        TZ="$existing_tz"
+        print_info "Using existing TZ=$TZ"
+    fi
+
+    # PUID/PGID - auto-detect
+    local existing_puid=$(get_env_value "PUID")
+    if [ -z "$existing_puid" ]; then
+        if [ -n "${SUDO_USER:-}" ]; then
+            PUID=$(id -u "$SUDO_USER")
+            PGID=$(id -g "$SUDO_USER")
+        else
+            PUID=$(id -u)
+            PGID=$(id -g)
+        fi
+        set_env_value "PUID" "$PUID"
+        set_env_value "PGID" "$PGID"
+        print_success "Set PUID=$PUID, PGID=$PGID"
+    else
+        PUID="$existing_puid"
+        PGID=$(get_env_value "PGID")
+        print_info "Using existing PUID=$PUID, PGID=$PGID"
+    fi
+
+    # Media root
+    local existing_media=$(get_env_value "MEDIA_ROOT")
+    if [ -z "$existing_media" ]; then
+        if [ -n "${SELECTED_MEDIA_PATH:-}" ]; then
+            MEDIA_ROOT="$SELECTED_MEDIA_PATH"
+        else
+            echo -n "Media root path (default: /mnt/media): "
+            read -r MEDIA_ROOT
+            MEDIA_ROOT=${MEDIA_ROOT:-/mnt/media}
+            create_media_structure "$MEDIA_ROOT"
+        fi
+        set_env_value "MEDIA_ROOT" "$MEDIA_ROOT"
+        print_success "Set MEDIA_ROOT=$MEDIA_ROOT"
+    else
+        MEDIA_ROOT="$existing_media"
+        print_info "Using existing MEDIA_ROOT=$MEDIA_ROOT"
+    fi
+
+    # Email
+    local existing_email=$(get_env_value "EMAIL")
+    if [ -z "$existing_email" ]; then
+        echo -n "Your email address (press Enter to skip): "
+        read -r EMAIL
+        set_env_value "EMAIL" "${EMAIL:-}"
+        [ -n "$EMAIL" ] && print_success "Set EMAIL=$EMAIL" || print_info "Skipped EMAIL"
+    else
+        EMAIL="$existing_email"
+        print_info "Using existing EMAIL=$EMAIL"
+    fi
+
+    # --- Homarr Encryption Key ---
+    local existing_homarr=$(get_env_value "HOMARR_ENCRYPTION_KEY")
+    if [ -z "$existing_homarr" ]; then
+        HOMARR_ENCRYPTION_KEY=$(openssl rand -hex 32)
+        set_env_value "HOMARR_ENCRYPTION_KEY" "$HOMARR_ENCRYPTION_KEY"
+        print_success "Generated new HOMARR_ENCRYPTION_KEY"
+
+        # Save to passwords file
+        cat > .passwords.txt << EOF
 HOMELAB PASSWORDS - $(date)
 KEEP THIS FILE SECURE!
 
@@ -629,11 +614,88 @@ Homarr Encryption Key: ${HOMARR_ENCRYPTION_KEY}
 These passwords have been added to .env
 Consider storing them in a password manager and deleting this file.
 EOF
-    chmod 600 .passwords.txt
+        chmod 600 .passwords.txt
+        print_warning "New passwords saved to .passwords.txt"
+    else
+        HOMARR_ENCRYPTION_KEY="$existing_homarr"
+        print_info "Using existing HOMARR_ENCRYPTION_KEY"
+    fi
 
-    print_success "Passwords saved to .passwords.txt (chmod 600)"
-    print_warning "Store these passwords securely and delete .passwords.txt when done"
+    # --- API Keys ---
 
+    # TMDB
+    local existing_tmdb=$(get_env_value "TMDB_API_KEY")
+    if [ -z "$existing_tmdb" ]; then
+        echo ""
+        print_info "TMDB API Key is used by Jellyseerr for media discovery"
+        echo "  Get one free at: https://www.themoviedb.org/settings/api"
+        echo ""
+        echo -n "TMDB API Key (press Enter to skip): "
+        read -r TMDB_API_KEY
+        set_env_value "TMDB_API_KEY" "${TMDB_API_KEY:-}"
+        [ -n "$TMDB_API_KEY" ] && print_success "Set TMDB_API_KEY" || print_info "Skipped TMDB_API_KEY"
+    else
+        TMDB_API_KEY="$existing_tmdb"
+        print_info "Using existing TMDB_API_KEY"
+    fi
+
+    # Recyclarr API keys - add placeholders if missing
+    set_env_value "SONARR_API_KEY" "your_sonarr_api_key_here"
+    set_env_value "RADARR_API_KEY" "your_radarr_api_key_here"
+    set_env_value "SABNZBD_API_KEY" ""
+
+    # --- Cloudflare Tunnel ---
+    local existing_cf_token=$(get_env_value "CLOUDFLARE_TUNNEL_TOKEN")
+    if [ -z "$existing_cf_token" ] || [ "$existing_cf_token" = "your_tunnel_token_here" ]; then
+        echo ""
+        echo -n "Do you want to set up a domain with Cloudflare Tunnel for public access? (y/N): "
+        read -r USE_CLOUDFLARE
+
+        if [[ "$USE_CLOUDFLARE" =~ ^[Yy]$ ]]; then
+            local existing_domain=$(get_env_value "DOMAIN")
+            if [ -z "$existing_domain" ]; then
+                echo -n "Domain name: "
+                read -r DOMAIN
+                set_env_value "DOMAIN" "$DOMAIN"
+            else
+                DOMAIN="$existing_domain"
+                print_info "Using existing DOMAIN=$DOMAIN"
+            fi
+
+            echo ""
+            print_info "To get your Cloudflare Tunnel token:"
+            echo "  1. Go to: https://one.dash.cloudflare.com/"
+            echo "  2. Navigate to: Zero Trust → Networks → Tunnels"
+            echo "  3. Create a tunnel and copy the token"
+            echo ""
+            echo -n "Cloudflare Tunnel Token: "
+            read -r CLOUDFLARE_TUNNEL_TOKEN
+
+            if [ -n "$CLOUDFLARE_TUNNEL_TOKEN" ]; then
+                set_env_value "CLOUDFLARE_TUNNEL_TOKEN" "$CLOUDFLARE_TUNNEL_TOKEN" "true"
+                print_success "Set CLOUDFLARE_TUNNEL_TOKEN"
+            else
+                set_env_value "CLOUDFLARE_TUNNEL_TOKEN" "your_tunnel_token_here"
+                print_warning "No token provided - you can add it to .env later"
+            fi
+        else
+            print_info "Skipping Cloudflare Tunnel setup"
+            print_info "Services will only be accessible on your local network"
+            set_env_value "DOMAIN" ""
+            set_env_value "CLOUDFLARE_TUNNEL_TOKEN" ""
+        fi
+    else
+        CLOUDFLARE_TUNNEL_TOKEN="$existing_cf_token"
+        DOMAIN=$(get_env_value "DOMAIN")
+        print_info "Using existing Cloudflare Tunnel configuration"
+    fi
+
+    echo ""
+    if [ "$is_update" = true ]; then
+        print_success ".env file updated (existing values preserved)"
+    else
+        print_success ".env file created successfully"
+    fi
 }
 
 # Create docker-compose.override.yml to disable unused services
