@@ -49,6 +49,45 @@ print_info() {
     echo -e "$1"
 }
 
+# Auto-detect GPU type for hardware transcoding
+detect_gpu_type() {
+    local gpu_info
+    gpu_info=$(lspci 2>/dev/null | grep -iE "vga|3d|display" || echo "")
+
+    # Check for AMD GPU (VAAPI)
+    if echo "$gpu_info" | grep -qi "amd\|radeon"; then
+        echo "vaapi"
+        return
+    fi
+
+    # Check for NVIDIA GPU (NVENC)
+    if echo "$gpu_info" | grep -qi "nvidia"; then
+        echo "nvenc"
+        return
+    fi
+
+    # Check for Intel integrated GPU (QSV)
+    if echo "$gpu_info" | grep -qi "intel"; then
+        echo "qsv"
+        return
+    fi
+
+    # Fallback to CPU encoding
+    echo "cpu"
+}
+
+# Get human-readable GPU name for logging
+get_gpu_name() {
+    local hw_type="$1"
+    case "$hw_type" in
+        vaapi) echo "AMD (VAAPI)" ;;
+        nvenc) echo "NVIDIA (NVENC)" ;;
+        qsv)   echo "Intel (QuickSync)" ;;
+        cpu)   echo "CPU (libx265)" ;;
+        *)     echo "Unknown" ;;
+    esac
+}
+
 # Wait for service to be ready
 wait_for_service() {
     local name="$1"
@@ -1122,6 +1161,25 @@ if [ -f "$ARM_CONFIG" ]; then
         print_success "MKV_ARGS set with retry flag for read errors"
     fi
 
+    # Enhanced MKV_ARGS: add directio=false and noscan for better protected disc handling
+    CURRENT_MKV_ARGS=$(grep '^MKV_ARGS:' "$ARM_CONFIG" 2>/dev/null | sed 's/MKV_ARGS: "\(.*\)"/\1/' || echo "")
+    if [ "$CURRENT_MKV_ARGS" = "--minlength=600 -r" ]; then
+        sed -i 's|MKV_ARGS: "--minlength=600 -r"|MKV_ARGS: "--minlength=600 -r --directio=false --noscan"|' "$ARM_CONFIG"
+        print_success "MKV_ARGS enhanced with directio=false and noscan for protected discs"
+    fi
+
+    # Configure rip methods for different disc types (backup mode handles protection better)
+    if grep -q 'RIPMETHOD_BR: "mkv"' "$ARM_CONFIG" || grep -q 'RIPMETHOD_BR: "PLACEHOLDER"' "$ARM_CONFIG"; then
+        sed -i 's|RIPMETHOD_BR: "mkv"|RIPMETHOD_BR: "backup"|' "$ARM_CONFIG"
+        sed -i 's|RIPMETHOD_BR: "PLACEHOLDER"|RIPMETHOD_BR: "backup"|' "$ARM_CONFIG"
+        print_success "RIPMETHOD_BR set to backup (better for protected Blu-rays)"
+    fi
+
+    if grep -q 'RIPMETHOD_DVD: "PLACEHOLDER"' "$ARM_CONFIG"; then
+        sed -i 's|RIPMETHOD_DVD: "PLACEHOLDER"|RIPMETHOD_DVD: "mkv"|' "$ARM_CONFIG"
+        print_success "RIPMETHOD_DVD set to mkv"
+    fi
+
     # Restart ARM to apply changes
     print_info "Restarting ARM container..."
     docker restart arm > /dev/null 2>&1 && print_success "ARM restarted" || print_warning "Failed to restart ARM"
@@ -1160,6 +1218,93 @@ generate_tdarr_schedule() {
     schedule+="]"
     echo "$schedule"
 }
+
+# ============================================
+# TDARR FLOW CREATION
+# ============================================
+
+# Auto-detect GPU hardware type
+GPU_TYPE=$(detect_gpu_type)
+GPU_NAME=$(get_gpu_name "$GPU_TYPE")
+print_info "Detected GPU: ${GPU_NAME}"
+
+# Set hardware encoding flag (false for CPU fallback)
+if [ "$GPU_TYPE" = "cpu" ]; then
+    HW_ENCODING="false"
+    HW_DECODING="false"
+else
+    HW_ENCODING="true"
+    HW_DECODING="true"
+fi
+
+# Check if flow already exists
+EXISTING_FLOWS=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
+    -H "Content-Type: application/json" \
+    -d '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}' 2>/dev/null || echo "{}")
+
+# Flow name based on detected hardware
+FLOW_NAME="h265-${GPU_TYPE}-transcode"
+
+if echo "$EXISTING_FLOWS" | grep -q "\"name\":\"${FLOW_NAME}\""; then
+    print_info "Tdarr ${GPU_NAME} flow already exists"
+    FLOW_ID=$(echo "$EXISTING_FLOWS" | python3 -c "
+import sys, json
+flow_name = '${FLOW_NAME}'
+try:
+    data = json.load(sys.stdin)
+    for flow in data:
+        if flow.get('name') == flow_name:
+            print(flow.get('_id', ''))
+            break
+except: pass
+" 2>/dev/null)
+else
+    print_info "Creating Tdarr H.265 ${GPU_NAME} transcoding flow..."
+
+    FLOW_ID=$(openssl rand -hex 5)
+
+    # Create flow with auto-detected hardware encoding
+    # Settings match manual configuration: hevc, fast preset, quality 22, hw encode/decode, force encoding
+    FLOW_RESPONSE=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"data\": {
+                \"collection\": \"FlowsJSONDB\",
+                \"mode\": \"insert\",
+                \"docID\": \"${FLOW_ID}\",
+                \"obj\": {
+                    \"_id\": \"${FLOW_ID}\",
+                    \"name\": \"${FLOW_NAME}\",
+                    \"description\": \"Auto-created: H.265 ${GPU_NAME} transcoding for media files\",
+                    \"flowPlugins\": [
+                        {\"name\":\"Input File\",\"sourceRepo\":\"Community\",\"pluginName\":\"inputFile\",\"version\":\"1.0.0\",\"id\":\"inp1\",\"position\":{\"x\":696,\"y\":180},\"flowType\":\"flow\"},
+                        {\"name\":\"Check File Medium\",\"sourceRepo\":\"Community\",\"pluginName\":\"checkFileMedium\",\"version\":\"1.0.0\",\"id\":\"chk1\",\"position\":{\"x\":696,\"y\":252}},
+                        {\"name\":\"Begin Command\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandStart\",\"version\":\"1.0.0\",\"id\":\"cmd1\",\"position\":{\"x\":696,\"y\":324}},
+                        {\"name\":\"Set Video Encoder\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandSetVideoEncoder\",\"version\":\"1.0.0\",\"id\":\"enc1\",\"position\":{\"x\":696,\"y\":396},\"inputsDB\":{\"outputCodec\":\"hevc\",\"ffmpegPresetEnabled\":true,\"ffmpegPreset\":\"fast\",\"ffmpegQualityEnabled\":true,\"ffmpegQuality\":22,\"hardwareEncoding\":${HW_ENCODING},\"hardwareType\":\"${GPU_TYPE}\",\"hardwareDecoding\":${HW_DECODING},\"forceEncoding\":true}},
+                        {\"name\":\"Set Container\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandSetContainer\",\"version\":\"1.0.0\",\"id\":\"con1\",\"position\":{\"x\":696,\"y\":468},\"inputsDB\":{\"container\":\"mkv\"}},
+                        {\"name\":\"Execute\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandExecute\",\"version\":\"1.0.0\",\"id\":\"exe1\",\"position\":{\"x\":696,\"y\":540}},
+                        {\"name\":\"Replace Original File\",\"sourceRepo\":\"Community\",\"pluginName\":\"replaceOriginalFile\",\"version\":\"1.0.0\",\"id\":\"rep1\",\"position\":{\"x\":696,\"y\":612}}
+                    ],
+                    \"flowEdges\": [
+                        {\"source\":\"inp1\",\"sourceHandle\":\"1\",\"target\":\"chk1\",\"id\":\"e1\",\"type\":\"smoothstep\"},
+                        {\"source\":\"chk1\",\"sourceHandle\":\"2\",\"target\":\"cmd1\",\"id\":\"e2\",\"type\":\"smoothstep\"},
+                        {\"source\":\"cmd1\",\"sourceHandle\":\"1\",\"target\":\"enc1\",\"id\":\"e3\",\"type\":\"smoothstep\"},
+                        {\"source\":\"enc1\",\"sourceHandle\":\"1\",\"target\":\"con1\",\"id\":\"e4\",\"type\":\"smoothstep\"},
+                        {\"source\":\"con1\",\"sourceHandle\":\"1\",\"target\":\"exe1\",\"id\":\"e5\",\"type\":\"smoothstep\"},
+                        {\"source\":\"exe1\",\"sourceHandle\":\"1\",\"target\":\"rep1\",\"id\":\"e6\",\"type\":\"smoothstep\"}
+                    ]
+                }
+            }
+        }" 2>/dev/null)
+
+    if echo "$FLOW_RESPONSE" | grep -q "\"_id\":\"${FLOW_ID}\""; then
+        print_success "H.265 ${GPU_NAME} transcoding flow created (ID: ${FLOW_ID})"
+    else
+        print_warning "Could not create flow via API"
+        print_info "Create flow manually at http://localhost:8265"
+        FLOW_ID=""
+    fi
+fi
 
 # Check if Movies library already exists
 EXISTING_LIBRARIES=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
@@ -1249,13 +1394,14 @@ else
                     \"filterResolutionsSkip\": \"\",
                     \"filterCodecsSkip\": \"\",
                     \"filterContainersSkip\": \"\",
-                    \"processPluginsSequentially\": true
+                    \"processPluginsSequentially\": true,
+                    \"flowId\": \"${FLOW_ID}\"
                 }
             }
         }" 2>/dev/null)
 
     if echo "$TDARR_RESPONSE" | grep -q "\"_id\":\"${LIBRARY_ID}\""; then
-        print_success "Movies library created with folder watching enabled"
+        print_success "Movies library created with folder watching and flow assigned"
     else
         print_warning "Could not create Movies library via API"
         print_info "Create manually at http://localhost:8265"
@@ -1342,26 +1488,57 @@ else
                     \"filterResolutionsSkip\": \"\",
                     \"filterCodecsSkip\": \"\",
                     \"filterContainersSkip\": \"\",
-                    \"processPluginsSequentially\": true
+                    \"processPluginsSequentially\": true,
+                    \"flowId\": \"${FLOW_ID}\"
                 }
             }
         }" 2>/dev/null)
 
     if echo "$TDARR_TV_RESPONSE" | grep -q "\"_id\":\"${TV_LIBRARY_ID}\""; then
-        print_success "TV Shows library created with folder watching enabled"
+        print_success "TV Shows library created with folder watching and flow assigned"
     else
         print_warning "Could not create TV Shows library via API"
     fi
 fi
 
+# ============================================
+# TDARR NODE WORKER CONFIGURATION
+# ============================================
+
+print_info "Configuring Tdarr node worker limits..."
+
+# Wait for node to register with the server
+sleep 3
+
+# Configure HomeLabNode with GPU workers enabled
+WORKER_RESPONSE=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
+    -H "Content-Type: application/json" \
+    -d '{
+        "data": {
+            "collection": "NodeJSONDB",
+            "mode": "update",
+            "docID": "HomeLabNode",
+            "obj": {
+                "workerLimits": {
+                    "healthcheckcpu": 0,
+                    "healthcheckgpu": 1,
+                    "transcodecpu": 0,
+                    "transcodegpu": 2
+                },
+                "nodePaused": false
+            }
+        }
+    }' 2>/dev/null)
+
+if echo "$WORKER_RESPONSE" | grep -q "HomeLabNode"; then
+    print_success "Tdarr node workers configured (2 GPU transcode, 1 GPU healthcheck)"
+else
+    print_warning "Could not configure node workers via API"
+    print_info "Set worker limits manually: Tdarr UI → Nodes tab → HomeLabNode"
+fi
+
 print_info ""
-print_info "Tdarr libraries configured. To complete setup:"
-print_info "  1. Open http://localhost:8265"
-print_info "  2. Create a flow with: Input File → Check File Medium → Begin Command"
-print_info "     → Set Video Encoder (hevc_vaapi for AMD) → Set Container (mkv)"
-print_info "     → Execute → Replace Original File"
-print_info "  3. Assign the flow to each library in Transcode Options"
-print_info ""
+print_success "Tdarr fully configured with H.265 ${GPU_NAME} flow and GPU workers"
 print_success "ARM will output raw MKV files → Tdarr will transcode automatically"
 
 # ============================================
@@ -1376,8 +1553,8 @@ print_success "✓ Sonarr - TV shows with download clients"
 print_success "✓ Radarr - Movies with download clients"
 print_success "✓ Lidarr - Music with download clients"
 print_success "✓ Bazarr - Subtitles (may need manual configuration)"
-print_success "✓ ARM - Blu-ray/DVD ripping (fault-tolerant, raw output)"
-print_success "✓ Tdarr - Automatic transcoding with folder watching"
+print_success "✓ ARM - Blu-ray/DVD ripping (backup mode for protected discs)"
+print_success "✓ Tdarr - H.265 ${GPU_NAME} transcoding with GPU workers enabled"
 print_success "✓ Prowlarr synced to *arr apps"
 [ -n "$SONARR_API_KEY" ] && [ -n "$RADARR_API_KEY" ] && print_success "✓ Quality profiles synced via Recyclarr"
 
@@ -1409,6 +1586,12 @@ if [ -z "$(grep "^NEWSHOSTING_USER=" "$PROJECT_ROOT/.env" 2>/dev/null | cut -d'=
 fi
 print_warning "⚠ Jellyfin: Complete initial setup at http://localhost:8096"
 print_warning "⚠ Jellyseerr: Link to Jellyfin at http://localhost:5055"
+print_warning "⚠ Homarr: Complete initial setup at http://localhost:7575"
+
+echo ""
+print_info "Once Homarr initial setup is complete, run:"
+print_info "  ./scripts/configure-homarr.sh"
+print_info "to automatically add all services to your dashboard."
 
 echo ""
 print_success "Your homelab is ready to use!"

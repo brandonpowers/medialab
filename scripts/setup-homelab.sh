@@ -46,6 +46,183 @@ generate_password() {
     openssl rand -base64 32
 }
 
+# ============================================
+# AUTO-DETECTION FUNCTIONS
+# ============================================
+
+# Auto-detect system timezone
+detect_timezone() {
+    local tz=""
+
+    # Method 1: timedatectl (systemd)
+    if command -v timedatectl &>/dev/null; then
+        tz=$(timedatectl show --property=Timezone --value 2>/dev/null || true)
+    fi
+
+    # Method 2: /etc/timezone file
+    if [ -z "$tz" ] && [ -f /etc/timezone ]; then
+        tz=$(cat /etc/timezone 2>/dev/null | tr -d '[:space:]')
+    fi
+
+    # Method 3: /etc/localtime symlink
+    if [ -z "$tz" ] && [ -L /etc/localtime ]; then
+        tz=$(readlink /etc/localtime 2>/dev/null | sed 's|.*/zoneinfo/||')
+    fi
+
+    # Fallback
+    echo "${tz:-America/Chicago}"
+}
+
+# Auto-detect optical drives (Blu-ray/DVD/CD)
+detect_optical_drives() {
+    local drives=()
+
+    # Scan for sr* devices (optical drives)
+    for dev in /dev/sr*; do
+        if [ -e "$dev" ]; then
+            drives+=("$dev")
+        fi
+    done
+
+    # Return space-separated list of drives
+    echo "${drives[*]}"
+}
+
+# Get optical drive info (for display)
+get_optical_drive_info() {
+    local device="$1"
+    local info=""
+
+    # Try to get device model from udevadm
+    if command -v udevadm &>/dev/null; then
+        info=$(udevadm info --query=property --name="$device" 2>/dev/null | grep -E "ID_MODEL=|ID_VENDOR=" | head -2 | cut -d'=' -f2 | tr '\n' ' ')
+    fi
+
+    # Fallback: check if it's a Blu-ray drive
+    if [ -z "$info" ]; then
+        if [ -e "/sys/class/block/$(basename "$device")/device/model" ]; then
+            info=$(cat "/sys/class/block/$(basename "$device")/device/model" 2>/dev/null)
+        fi
+    fi
+
+    echo "${info:-Unknown optical drive}"
+}
+
+# Find the corresponding SCSI generic device for an optical drive
+find_sg_device() {
+    local sr_device="$1"
+    local sr_name=$(basename "$sr_device")
+
+    # Method 1: Check sysfs for the sg device
+    if [ -d "/sys/class/block/$sr_name/device/scsi_generic" ]; then
+        local sg_name=$(ls "/sys/class/block/$sr_name/device/scsi_generic" 2>/dev/null | head -1)
+        if [ -n "$sg_name" ]; then
+            echo "/dev/$sg_name"
+            return
+        fi
+    fi
+
+    # Method 2: Find sg device with matching SCSI address
+    local scsi_host=$(readlink -f "/sys/class/block/$sr_name/device" 2>/dev/null | grep -oP '\d+:\d+:\d+:\d+' | head -1)
+    if [ -n "$scsi_host" ]; then
+        for sg in /sys/class/scsi_generic/sg*; do
+            local sg_scsi=$(readlink -f "$sg/device" 2>/dev/null | grep -oP '\d+:\d+:\d+:\d+' | head -1)
+            if [ "$sg_scsi" = "$scsi_host" ]; then
+                echo "/dev/$(basename "$sg")"
+                return
+            fi
+        done
+    fi
+
+    # Fallback: assume sg device number matches sr device number
+    local num=$(echo "$sr_name" | grep -oP '\d+$')
+    if [ -e "/dev/sg$((num+1))" ]; then
+        echo "/dev/sg$((num+1))"
+    fi
+}
+
+# Auto-detect the largest non-system storage drive
+detect_largest_storage_drive() {
+    local largest_drive=""
+    local largest_size=0
+
+    # Get list of block devices, excluding loop devices and the root filesystem
+    while IFS= read -r line; do
+        local name=$(echo "$line" | awk '{print $1}')
+        local size_bytes=$(echo "$line" | awk '{print $2}')
+        local mountpoint=$(echo "$line" | awk '{print $3}')
+
+        # Skip if it's the root filesystem
+        if [ "$mountpoint" = "/" ]; then
+            continue
+        fi
+
+        # Skip if size is empty or zero
+        if [ -z "$size_bytes" ] || [ "$size_bytes" = "0" ]; then
+            continue
+        fi
+
+        # Check if this is larger than current largest
+        if [ "$size_bytes" -gt "$largest_size" ]; then
+            largest_size=$size_bytes
+            largest_drive="/dev/$name"
+        fi
+    done < <(lsblk -d -b -n -o NAME,SIZE,MOUNTPOINT 2>/dev/null | grep -E "^(sd|nvme|vd)")
+
+    echo "$largest_drive"
+}
+
+# Format bytes to human readable
+format_bytes() {
+    local bytes=$1
+    if [ "$bytes" -ge 1099511627776 ]; then
+        echo "$(awk "BEGIN {printf \"%.1f\", $bytes/1099511627776}")TB"
+    elif [ "$bytes" -ge 1073741824 ]; then
+        echo "$(awk "BEGIN {printf \"%.1f\", $bytes/1073741824}")GB"
+    else
+        echo "$(awk "BEGIN {printf \"%.1f\", $bytes/1048576}")MB"
+    fi
+}
+
+# Auto-detect GPU type for hardware transcoding
+detect_gpu_type() {
+    local gpu_info
+    gpu_info=$(lspci 2>/dev/null | grep -iE "vga|3d|display" || echo "")
+
+    # Check for AMD GPU (VAAPI)
+    if echo "$gpu_info" | grep -qi "amd\|radeon"; then
+        echo "vaapi"
+        return
+    fi
+
+    # Check for NVIDIA GPU (NVENC)
+    if echo "$gpu_info" | grep -qi "nvidia"; then
+        echo "nvenc"
+        return
+    fi
+
+    # Check for Intel integrated GPU (QSV)
+    if echo "$gpu_info" | grep -qi "intel"; then
+        echo "qsv"
+        return
+    fi
+
+    # Fallback to CPU encoding
+    echo "cpu"
+}
+
+# Get human-readable GPU name
+get_gpu_name() {
+    local hw_type="$1"
+    case "$hw_type" in
+        vaapi) echo "AMD (VAAPI)" ;;
+        nvenc) echo "NVIDIA (NVENC)" ;;
+        qsv)   echo "Intel (QuickSync)" ;;
+        cpu)   echo "CPU (software)" ;;
+        *)     echo "Unknown" ;;
+    esac
+}
+
 # Display available drives and let user select one for media storage
 select_media_drive() {
     print_section "Media Drive Selection"
@@ -57,12 +234,15 @@ select_media_drive() {
     # Show: NAME, SIZE, TYPE, MOUNTPOINT, MODEL
     local drives=()
     local drive_info=()
-    local i=1
+    local drive_sizes=()
+    local recommended_idx=-1
+    local largest_size=0
 
     # Read drives into array
     while IFS= read -r line; do
         local name=$(echo "$line" | awk '{print $1}')
         local size=$(echo "$line" | awk '{print $2}')
+        local size_bytes=$(lsblk -d -b -n -o SIZE "/dev/$name" 2>/dev/null)
         local type=$(echo "$line" | awk '{print $3}')
         local mountpoint=$(echo "$line" | awk '{print $4}')
         local model=$(echo "$line" | awk '{for(i=5;i<=NF;i++) printf $i" "; print ""}' | xargs)
@@ -74,12 +254,30 @@ select_media_drive() {
 
         drives+=("$name")
         drive_info+=("$size|$type|$mountpoint|$model")
+        drive_sizes+=("$size_bytes")
+
+        # Track largest drive for recommendation
+        if [ -n "$size_bytes" ] && [ "$size_bytes" -gt "$largest_size" ]; then
+            largest_size=$size_bytes
+            recommended_idx=${#drives[@]}
+            recommended_idx=$((recommended_idx - 1))
+        fi
     done < <(lsblk -d -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL -n | grep -E "^(sd|nvme|vd)" | grep -v "loop")
 
     if [ ${#drives[@]} -eq 0 ]; then
         print_warning "No additional drives found"
         print_info "Using default media path: /mnt/media"
         SELECTED_MEDIA_PATH="/mnt/media"
+        return
+    fi
+
+    # If only one non-system drive and it's large enough (>100GB), auto-select it
+    if [ ${#drives[@]} -eq 1 ] && [ "$largest_size" -gt 107374182400 ]; then
+        local name="${drives[0]}"
+        IFS='|' read -r size type mountpoint model <<< "${drive_info[0]}"
+        print_success "Auto-detected media drive: /dev/$name ($size)"
+        print_info "Model: ${model:-Unknown}"
+        setup_media_drive "/dev/$name" "$mountpoint"
         return
     fi
 
@@ -93,17 +291,36 @@ select_media_drive() {
         IFS='|' read -r size type mountpoint model <<< "${drive_info[$idx]}"
         mountpoint=${mountpoint:-"(not mounted)"}
         model=${model:-"Unknown"}
-        printf "  %-4s %-12s %-10s %-8s %-20s %s\n" "[$((idx+1))]" "/dev/$name" "$size" "$type" "$mountpoint" "$model"
+        local rec_marker=""
+        if [ "$idx" -eq "$recommended_idx" ]; then
+            rec_marker=" (Recommended - largest)"
+        fi
+        printf "  %-4s %-12s %-10s %-8s %-20s %s%s\n" "[$((idx+1))]" "/dev/$name" "$size" "$type" "$mountpoint" "$model" "$rec_marker"
     done
 
     echo ""
     printf "  %-4s %-12s\n" "[S]" "Skip - use default path (/mnt/media)"
     echo ""
 
+    # Default to recommended drive
+    local default_selection=$((recommended_idx + 1))
+    if [ $recommended_idx -ge 0 ]; then
+        print_info "Press Enter to use recommended drive, or select another option"
+    fi
+
     # Get user selection
     while true; do
-        echo -n "Select a drive for media storage (1-${#drives[@]} or S to skip): "
+        if [ $recommended_idx -ge 0 ]; then
+            echo -n "Select a drive for media storage [${default_selection}]: "
+        else
+            echo -n "Select a drive for media storage (1-${#drives[@]} or S to skip): "
+        fi
         read -r selection
+
+        # Default to recommended if just Enter pressed
+        if [ -z "$selection" ] && [ $recommended_idx -ge 0 ]; then
+            selection=$default_selection
+        fi
 
         if [[ "$selection" =~ ^[Ss]$ ]]; then
             print_info "Using default media path: /mnt/media"
@@ -328,6 +545,7 @@ create_media_structure() {
         "downloads/incomplete"
         "downloads/watch"
         "transcode"
+        "arm"  # ARM temporary ripping storage
     )
 
     for dir in "${media_dirs[@]}"; do
@@ -535,14 +753,12 @@ generate_env() {
 
     # --- System Configuration ---
 
-    # Timezone
+    # Timezone - auto-detect from system
     local existing_tz=$(get_env_value "TZ")
     if [ -z "$existing_tz" ]; then
-        echo -n "Timezone (default: America/Chicago): "
-        read -r TZ
-        TZ=${TZ:-America/Chicago}
+        TZ=$(detect_timezone)
         set_env_value "TZ" "$TZ"
-        print_success "Set TZ=$TZ"
+        print_success "Auto-detected timezone: $TZ"
     else
         TZ="$existing_tz"
         print_info "Using existing TZ=$TZ"
@@ -756,7 +972,6 @@ create_directories() {
         "data/arm/config"
         "data/arm/db"
         "data/arm/logs"
-        "data/arm/media"
     )
 
     for dir in "${dirs[@]}"; do
@@ -789,14 +1004,36 @@ create_directories() {
 setup_arm_udev() {
     print_section "Setting Up ARM Automatic Disc Detection"
 
-    # Check if optical drive exists
-    if [ ! -e /dev/sr0 ]; then
-        print_warning "No optical drive found at /dev/sr0"
+    # Auto-detect optical drives
+    local optical_drives=$(detect_optical_drives)
+
+    if [ -z "$optical_drives" ]; then
+        print_warning "No optical drives detected"
         print_info "Skipping ARM udev configuration"
+        print_info "If you add an optical drive later, re-run this script"
         return
     fi
 
-    print_success "Optical drive found at /dev/sr0"
+    # Display detected drives
+    print_success "Detected optical drive(s):"
+    for drive in $optical_drives; do
+        local drive_info=$(get_optical_drive_info "$drive")
+        local sg_device=$(find_sg_device "$drive")
+        print_info "  $drive - $drive_info"
+        if [ -n "$sg_device" ]; then
+            print_info "    SCSI generic device: $sg_device"
+        fi
+    done
+
+    # Store detected drives for docker-compose configuration
+    DETECTED_OPTICAL_DRIVES="$optical_drives"
+    DETECTED_OPTICAL_DRIVE=$(echo "$optical_drives" | awk '{print $1}')  # First drive
+    DETECTED_SG_DEVICE=$(find_sg_device "$DETECTED_OPTICAL_DRIVE")
+
+    # Save to .env for docker-compose to use
+    set_env_value "OPTICAL_DRIVE" "${DETECTED_OPTICAL_DRIVE:-/dev/sr0}"
+    set_env_value "OPTICAL_SG_DEVICE" "${DETECTED_SG_DEVICE:-/dev/sg1}"
+    print_success "Optical drive configuration saved to .env"
 
     # Create ARM udev wrapper script
     # This script passes udev environment variables into the ARM container
@@ -845,6 +1082,42 @@ WRAPPER_EOF
 }
 
 # Validate docker-compose.yml
+# Detect and save hardware configuration
+detect_hardware() {
+    print_section "Hardware Auto-Detection"
+
+    # GPU Detection
+    local gpu_type=$(detect_gpu_type)
+    local gpu_name=$(get_gpu_name "$gpu_type")
+    print_success "GPU: $gpu_name"
+    set_env_value "GPU_TYPE" "$gpu_type"
+
+    # Optical Drive Detection (already done in setup_arm_udev, but show summary)
+    local optical_drives=$(detect_optical_drives)
+    if [ -n "$optical_drives" ]; then
+        local drive_count=$(echo "$optical_drives" | wc -w)
+        print_success "Optical drives: $drive_count detected"
+        for drive in $optical_drives; do
+            local info=$(get_optical_drive_info "$drive")
+            print_info "  $drive - $info"
+        done
+    else
+        print_info "Optical drives: None detected"
+    fi
+
+    # Memory Detection
+    local total_mem=$(free -h | awk '/^Mem:/{print $2}')
+    print_success "System memory: $total_mem"
+
+    # CPU Detection
+    local cpu_cores=$(nproc)
+    local cpu_model=$(grep -m1 "model name" /proc/cpuinfo 2>/dev/null | cut -d: -f2 | xargs || echo "Unknown")
+    print_success "CPU: $cpu_model ($cpu_cores cores)"
+
+    echo ""
+    print_info "Hardware detection complete - configuration saved to .env"
+}
+
 validate_compose() {
     print_section "Validating Docker Compose Configuration"
 
@@ -965,6 +1238,7 @@ main() {
     check_prerequisites
     select_media_drive
     generate_env
+    detect_hardware
     create_compose_override
     create_directories
     setup_arm_udev

@@ -256,15 +256,15 @@ services:
       ARM_UID: ${PUID}
       ARM_GID: ${PGID}
     devices:
-      - /dev/sr0:/dev/sr0
-      - /dev/sg1:/dev/sg1  # SCSI generic device for optical drive
+      - ${OPTICAL_DRIVE:-/dev/sr0}:${OPTICAL_DRIVE:-/dev/sr0}  # Auto-detected optical drive
+      - ${OPTICAL_SG_DEVICE:-/dev/sg1}:${OPTICAL_SG_DEVICE:-/dev/sg1}  # SCSI generic device
       - /dev/dri:/dev/dri  # GPU hardware acceleration for transcoding
     volumes:
       - ./data/arm/config:/etc/arm/config
       - ./data/arm/db:/home/arm/db
       - ./data/arm/logs:/home/arm/logs
-      - ./data/arm/media:/home/arm/media  # Temporary storage during ripping
-      - ${MEDIA_ROOT}/movies:/home/arm/movies  # Final output location
+      - ${MEDIA_ROOT}/arm:/home/arm/media  # Temporary storage during ripping (on external drive)
+      - ${MEDIA_ROOT}:/home/arm/movies  # Final output (ARM adds movies/ or tv/ subfolder)
       - /run/udev:/run/udev:ro  # udev events for automatic disc detection
     logging: *default-logging
 
