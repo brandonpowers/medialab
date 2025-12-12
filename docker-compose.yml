@@ -13,6 +13,15 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# Security hardening - applied to all containers
+# no-new-privileges: Prevents privilege escalation via setuid/setgid binaries
+# cap_drop ALL: Removes all Linux capabilities (principle of least privilege)
+x-security: &default-security
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
 services:
   # ============================================
   # REMOTE ACCESS & NETWORKING
@@ -25,6 +34,7 @@ services:
     command: tunnel run
     environment:
       TUNNEL_TOKEN: ${CLOUDFLARE_TUNNEL_TOKEN}
+    <<: *default-security
     logging: *default-logging
 
   # ============================================
@@ -42,7 +52,9 @@ services:
       SECRET_ENCRYPTION_KEY: ${HOMARR_ENCRYPTION_KEY}
     volumes:
       - ./data/homarr/appdata:/appdata
-      - /var/run/docker.sock:/var/run/docker.sock
+      # SECURITY: Docker socket removed - prevents container escape attacks
+      # Container status feature disabled; use 'docker ps' to check status
+    <<: *default-security
     logging: *default-logging
 
   jellyfin:
@@ -66,6 +78,7 @@ services:
       timeout: 10s
       retries: 3
       start_period: 40s
+    <<: *default-security
     logging: *default-logging
 
   jellyseerr:
@@ -78,6 +91,7 @@ services:
       <<: *common-env
     volumes:
       - ./data/jellyseerr/config:/app/config
+    <<: *default-security
     logging: *default-logging
 
   # ============================================
@@ -101,6 +115,7 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
+    <<: *default-security
     logging: *default-logging
 
   radarr:
@@ -119,6 +134,7 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
+    <<: *default-security
     logging: *default-logging
 
   lidarr:
@@ -132,6 +148,7 @@ services:
     volumes:
       - ./data/lidarr/config:/config
       - *common-vol
+    <<: *default-security
     logging: *default-logging
 
   prowlarr:
@@ -150,6 +167,7 @@ services:
       interval: 60s
       timeout: 10s
       retries: 3
+    <<: *default-security
     logging: *default-logging
 
   flaresolverr:
@@ -163,6 +181,7 @@ services:
       LOG_HTML: false
       CAPTCHA_SOLVER: none
       TZ: ${TZ}
+    <<: *default-security
     logging: *default-logging
 
   bazarr:
@@ -176,6 +195,7 @@ services:
     volumes:
       - ./data/bazarr/config:/config
       - *common-vol
+    <<: *default-security
     logging: *default-logging
 
   recyclarr:
@@ -187,6 +207,7 @@ services:
       TZ: ${TZ}
     volumes:
       - ./data/recyclarr/config:/config
+    <<: *default-security
     logging: *default-logging
 
   qbittorrent:
@@ -204,6 +225,7 @@ services:
       - ./data/qbittorrent/config:/config
       - ${MEDIA_ROOT}/downloads:/downloads
       - *common-vol
+    <<: *default-security
     logging: *default-logging
 
   sabnzbd:
@@ -218,6 +240,7 @@ services:
       - ./data/sabnzbd/config:/config
       - ${MEDIA_ROOT}/downloads:/downloads
       - *common-vol
+    <<: *default-security
     logging: *default-logging
 
   tdarr:
@@ -242,6 +265,7 @@ services:
       - ./data/tdarr/logs:/app/logs
       - ./data/tdarr/temp:/temp
       - ${MEDIA_ROOT}:/media  # Read-write for transcoding ARM rips
+    <<: *default-security
     logging: *default-logging
 
   arm:
@@ -276,6 +300,7 @@ services:
       - "3001:3001"
     volumes:
       - uptime_kuma_data:/app/data
+    <<: *default-security
     logging: *default-logging
 
 volumes:

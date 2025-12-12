@@ -252,13 +252,12 @@ Unified dashboard providing quick access to all your services.
    - **Icon**: Choose from 10K+ built-in icons
    - **Description**: Service description
 
-4. **Configure Docker Integration:**
+4. **Docker Integration (Disabled for Security):**
 
-   Settings → Docker
+   The Docker socket is **not mounted** to prevent container escape attacks.
+   Container status monitoring is disabled; use `docker ps` to check status.
 
-   - Docker socket is already mounted: `/var/run/docker.sock`
-   - Enable container status monitoring
-   - View CPU, memory, and network stats
+   All other Homarr features work normally without Docker socket access.
 
 5. **Add Widgets:**
 

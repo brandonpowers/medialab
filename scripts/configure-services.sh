@@ -817,6 +817,41 @@ if [[ "$CONFIGURE_USENET" =~ ^[Yy]$ ]]; then
     fi
 fi
 
+# Configure SABnzbd folders (runs regardless of usenet setup choice)
+if check_sabnzbd_ready; then
+    SABNZBD_API_KEY=$(get_sabnzbd_api_key)
+    if [ -n "$SABNZBD_API_KEY" ]; then
+        print_info "Configuring SABnzbd download folders..."
+
+        # Set download folders to use the mounted /downloads directory
+        curl -s "http://localhost:8085/sabnzbd/api" \
+            -d "mode=set_config" \
+            -d "apikey=${SABNZBD_API_KEY}" \
+            -d "section=misc" \
+            -d "keyword=download_dir" \
+            -d "download_dir=/downloads/incomplete" \
+            > /dev/null 2>&1
+
+        curl -s "http://localhost:8085/sabnzbd/api" \
+            -d "mode=set_config" \
+            -d "apikey=${SABNZBD_API_KEY}" \
+            -d "section=misc" \
+            -d "keyword=complete_dir" \
+            -d "complete_dir=/downloads/complete" \
+            > /dev/null 2>&1
+
+        curl -s "http://localhost:8085/sabnzbd/api" \
+            -d "mode=set_config" \
+            -d "apikey=${SABNZBD_API_KEY}" \
+            -d "section=misc" \
+            -d "keyword=dirscan_dir" \
+            -d "dirscan_dir=/downloads/watch" \
+            > /dev/null 2>&1
+
+        print_success "SABnzbd folders configured: /downloads/{incomplete,complete,watch}"
+    fi
+fi
+
 if [[ "$CONFIGURE_USENET" =~ ^[Yy]$ ]]; then
     NEWSHOSTING_USER=$(prompt_credential "NEWSHOSTING_USER" "Newshosting username: " "false")
     NEWSHOSTING_PASS=$(prompt_credential "NEWSHOSTING_PASS" "Newshosting password: " "true")
