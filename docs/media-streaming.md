@@ -223,22 +223,34 @@ Unified dashboard providing quick access to all your services.
 
 1. **Access Homarr:**
    - Public: https://homarr.yourdomain.com
-   - Local: http://CT-IP:7575
+   - Local: http://SERVER_IP:7575
 
 2. **First Time Setup:**
    - Create admin account
    - Choose dashboard layout
    - Select theme (light/dark)
 
-3. **Add Services:**
+3. **Automated App Setup (Recommended):**
 
-   Click **Settings** → **Services**
+   After initial setup, run the automation script:
+   ```bash
+   ./scripts/configure-homarr.sh
+   ```
+
+   This will:
+   - Prompt you to create an API key
+   - Automatically add all homelab services as apps
+   - Configure service icons and ping URLs
+
+   **Manual App Setup (Alternative):**
+
+   Go to **Management** → **Apps** → **New app**
 
    Add each service:
    - **Name**: Service name (e.g., "Jellyfin")
-   - **URL**: Service URL (e.g., https://jellyfin.yourdomain.com)
-   - **Icon**: Choose from icon library
-   - **Category**: Organize services (Media, Admin, etc.)
+   - **URL**: Service URL (e.g., http://SERVER_IP:8096)
+   - **Icon**: Choose from 10K+ built-in icons
+   - **Description**: Service description
 
 4. **Configure Docker Integration:**
 

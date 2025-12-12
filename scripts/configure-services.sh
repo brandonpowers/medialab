@@ -1188,6 +1188,48 @@ else
     print_info "ARM will be configured on first run"
 fi
 
+# Configure MakeMKV settings for better read reliability
+MAKEMKV_DIR="${PROJECT_ROOT}/data/arm/config/.MakeMKV"
+MAKEMKV_SETTINGS="${MAKEMKV_DIR}/settings.conf"
+
+print_info "Configuring MakeMKV settings..."
+
+# Create MakeMKV config directory if needed
+mkdir -p "$MAKEMKV_DIR"
+
+# Create or update settings.conf with optimized values
+if [ ! -f "$MAKEMKV_SETTINGS" ]; then
+    cat > "$MAKEMKV_SETTINGS" << 'EOF'
+# MakeMKV settings for improved read reliability
+# See: https://forum.makemkv.com/forum/viewtopic.php?t=8820
+
+# Increase retry count for read errors (default: 5)
+io_ErrorRetryCount = "20"
+
+# Larger read buffer for better performance (in MB)
+io_RBufSizeMB = "128"
+EOF
+    print_success "Created MakeMKV settings with optimized values"
+else
+    # Update existing settings if needed
+    if ! grep -q "io_ErrorRetryCount" "$MAKEMKV_SETTINGS"; then
+        echo 'io_ErrorRetryCount = "20"' >> "$MAKEMKV_SETTINGS"
+        print_success "Added io_ErrorRetryCount = 20"
+    else
+        print_info "io_ErrorRetryCount already configured"
+    fi
+
+    if ! grep -q "io_RBufSizeMB" "$MAKEMKV_SETTINGS"; then
+        echo 'io_RBufSizeMB = "128"' >> "$MAKEMKV_SETTINGS"
+        print_success "Added io_RBufSizeMB = 128"
+    else
+        print_info "io_RBufSizeMB already configured"
+    fi
+fi
+
+# Set correct ownership for MakeMKV config
+chown -R ${PUID:-1000}:${PGID:-1000} "$MAKEMKV_DIR" 2>/dev/null || true
+
 # ============================================
 # TDARR CONFIGURATION
 # ============================================

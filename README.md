@@ -34,8 +34,14 @@ A complete, privacy-first media server stack running on Ubuntu Server 24.04 LTS.
 Deploy and configure your entire homelab with automated scripts:
 
 ```bash
+# Copy the repository from your local machine
+rsync -avz --no-group --exclude='.env*' --exclude='.git' --exclude='.gitignore' --exclude='data/' ./ [user]@[ip-address]:/opt/homelab
+
+OR
+
 # Clone repository (as root or with sudo)
 sudo git clone https://github.com/brandonpowers/homelab.git /opt/homelab
+
 sudo chown -R $(whoami):$(whoami) /opt/homelab
 cd /opt/homelab
 

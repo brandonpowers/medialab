@@ -244,8 +244,20 @@ select_media_drive() {
         local size=$(echo "$line" | awk '{print $2}')
         local size_bytes=$(lsblk -d -b -n -o SIZE "/dev/$name" 2>/dev/null)
         local type=$(echo "$line" | awk '{print $3}')
-        local mountpoint=$(echo "$line" | awk '{print $4}')
-        local model=$(echo "$line" | awk '{for(i=5;i<=NF;i++) printf $i" "; print ""}' | xargs)
+        local model=$(echo "$line" | awk '{for(i=4;i<=NF;i++) printf $i" "; print ""}' | xargs)
+
+        # Get mount point from partitions (disks themselves aren't mounted, partitions are)
+        # Prioritize fstab entries over automount locations
+        local mountpoint=""
+        local first_partition=$(lsblk -n -o NAME "/dev/$name" 2>/dev/null | tail -n +2 | head -1)
+        if [ -n "$first_partition" ]; then
+            # Use get_preferred_mount if available, otherwise fall back to lsblk
+            mountpoint=$(get_preferred_mount "/dev/$first_partition" 2>/dev/null)
+        fi
+        # Fall back to lsblk if get_preferred_mount returned nothing
+        if [ -z "$mountpoint" ]; then
+            mountpoint=$(lsblk -n -o MOUNTPOINT "/dev/$name" 2>/dev/null | grep -v "^$" | head -1)
+        fi
 
         # Skip if it's the boot/root drive
         if [ "$mountpoint" == "/" ] || [ "$mountpoint" == "/boot" ] || [ "$mountpoint" == "/boot/efi" ]; then
@@ -262,7 +274,7 @@ select_media_drive() {
             recommended_idx=${#drives[@]}
             recommended_idx=$((recommended_idx - 1))
         fi
-    done < <(lsblk -d -o NAME,SIZE,TYPE,MOUNTPOINT,MODEL -n | grep -E "^(sd|nvme|vd)" | grep -v "loop")
+    done < <(lsblk -d -o NAME,SIZE,TYPE,MODEL -n | grep -E "^(sd|nvme|vd)" | grep -v "loop")
 
     if [ ${#drives[@]} -eq 0 ]; then
         print_warning "No additional drives found"
@@ -306,6 +318,7 @@ select_media_drive() {
     local default_selection=$((recommended_idx + 1))
     if [ $recommended_idx -ge 0 ]; then
         print_info "Press Enter to use recommended drive, or select another option"
+        echo ""
     fi
 
     # Get user selection
@@ -489,6 +502,35 @@ format_drive() {
     print_success "Drive formatted successfully"
 }
 
+# Get the preferred mount point for a partition
+# Prioritizes fstab entries over automount locations (e.g., /media/*)
+get_preferred_mount() {
+    local partition="$1"
+
+    # Get UUID for fstab lookup
+    local uuid=$(blkid -s UUID -o value "$partition" 2>/dev/null)
+
+    # Check fstab for configured mount point (preferred)
+    if [ -n "$uuid" ]; then
+        local fstab_mount=$(grep -E "UUID=$uuid|$partition" /etc/fstab 2>/dev/null | awk '{print $2}' | head -1)
+        if [ -n "$fstab_mount" ] && [ "$fstab_mount" != "none" ] && [ "$fstab_mount" != "swap" ]; then
+            echo "$fstab_mount"
+            return
+        fi
+    fi
+
+    # Fall back to current mount point, but warn if it's an automount location
+    local current_mount=$(findmnt -n -o TARGET "$partition" 2>/dev/null)
+    if [ -n "$current_mount" ]; then
+        # Warn if this looks like a GNOME/udisks automount path
+        if [[ "$current_mount" == /media/* ]] && [[ "$current_mount" != /media/brandon/* ]]; then
+            print_warning "Detected automount path: $current_mount"
+            print_info "Consider adding this partition to /etc/fstab for a stable mount point"
+        fi
+        echo "$current_mount"
+    fi
+}
+
 # Mount a partition
 mount_partition() {
     local partition="$1"
@@ -501,8 +543,8 @@ mount_partition() {
         mkdir -p "$mount_point"
     fi
 
-    # Check if already mounted elsewhere
-    local current_mount=$(findmnt -n -o TARGET "$partition" 2>/dev/null)
+    # Check if already mounted - prefer fstab location over automount
+    local current_mount=$(get_preferred_mount "$partition")
     if [ -n "$current_mount" ]; then
         print_info "Partition already mounted at $current_mount"
         SELECTED_MEDIA_PATH="$current_mount"
@@ -679,16 +721,6 @@ check_prerequisites() {
     fi
 }
 
-# Backup existing .env if it exists
-backup_env() {
-    if [ -f .env ]; then
-        local backup_file=".env.backup.$(date +%Y%m%d_%H%M%S)"
-        print_warning "Existing .env found - backing up to $backup_file"
-        cp .env "$backup_file"
-        print_success "Backup created"
-    fi
-}
-
 # Generate .env file
 # Helper function to get a value from .env file
 get_env_value() {
@@ -739,16 +771,18 @@ generate_env() {
     # Check if .env exists
     if [ -f .env ]; then
         is_update=true
-        print_info "Existing .env found - will preserve existing values"
-        print_info "Only missing variables will be added"
+        print_info "Existing .env found - preserving values, adding missing variables"
+
+        # Backup before making changes
+        local backup_file=".env.backup.$(date +%Y%m%d_%H%M%S)"
+        cp .env "$backup_file"
+        print_success "Backup created: $backup_file"
         echo ""
 
         # Source existing values so we can use them
         set -a
         source .env
         set +a
-
-        backup_env
     fi
 
     # --- System Configuration ---
@@ -906,11 +940,15 @@ EOF
         print_info "Using existing Cloudflare Tunnel configuration"
     fi
 
+    # Show configuration summary
     echo ""
-    if [ "$is_update" = true ]; then
-        print_success ".env file updated (existing values preserved)"
-    else
-        print_success ".env file created successfully"
+    print_success "Environment configuration complete"
+    echo ""
+    echo "  Timezone:     $TZ"
+    echo "  User/Group:   $PUID:$PGID"
+    echo "  Media root:   $MEDIA_ROOT"
+    if [ -n "$DOMAIN" ]; then
+        echo "  Domain:       $DOMAIN"
     fi
 }
 
@@ -1250,13 +1288,18 @@ main() {
     show_access_info
 
     echo ""
-    print_section "Setup Complete!"
-    print_success "Your homelab is now running!"
-    print_info "Check logs with: docker compose logs -f"
-    print_info "Stop services with: docker compose down"
-    print_info "Update services with: docker compose pull && docker compose up -d"
-
-    echo -e "\n${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+    echo -e "${BLUE}╔═══════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║${NC}   ${GREEN}✓ SETUP COMPLETE${NC}                                       ${BLUE}║${NC}"
+    echo -e "${BLUE}╚═══════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo "  Your homelab is now running!"
+    echo ""
+    echo "  Useful commands:"
+    echo "    docker compose logs -f       View logs"
+    echo "    docker compose down          Stop services"
+    echo "    docker compose up -d         Start services"
+    echo "    docker compose pull          Update images"
+    echo ""
 }
 
 # Run main function
