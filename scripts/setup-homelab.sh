@@ -1119,6 +1119,32 @@ WRAPPER_EOF
     print_info "Monitor with: docker logs -f arm"
 }
 
+# Setup scheduled maintenance cron jobs
+setup_cron_jobs() {
+    print_section "Setting Up Scheduled Maintenance"
+
+    local cron_updated=false
+    local current_cron=$(crontab -l 2>/dev/null || echo "")
+
+    # Tdarr temp cleanup - remove orphaned transcode files older than 1 day
+    local tdarr_cron="0 2 * * * find $(pwd)/data/tdarr/temp -mindepth 1 -mtime +1 -delete 2>/dev/null"
+
+    if echo "$current_cron" | grep -q "tdarr/temp"; then
+        print_info "Tdarr temp cleanup cron already exists"
+    else
+        print_info "Adding Tdarr temp cleanup cron (daily at 2am)..."
+        (echo "$current_cron"; echo "$tdarr_cron") | crontab -
+        cron_updated=true
+        print_success "Tdarr temp cleanup scheduled: removes orphaned files older than 1 day"
+    fi
+
+    if [ "$cron_updated" = true ]; then
+        print_success "Cron jobs configured"
+    else
+        print_info "All cron jobs already configured"
+    fi
+}
+
 # Validate docker-compose.yml
 # Detect and save hardware configuration
 detect_hardware() {
@@ -1280,6 +1306,7 @@ main() {
     create_compose_override
     create_directories
     setup_arm_udev
+    setup_cron_jobs
     validate_compose
     pull_images
     start_services
