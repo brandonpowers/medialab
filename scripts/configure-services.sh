@@ -247,6 +247,33 @@ wait_for_service "Jellyfin" "http://localhost:8096/health" || print_info "Jellyf
 wait_for_service "Jellyseerr" "http://localhost:5055" || print_info "Jellyseerr will need manual configuration"
 
 # ============================================
+# PRE-FETCH API KEYS FOR USENET
+# ============================================
+
+# Get SABnzbd API key early so it's available for download client configuration
+# This allows Usenet to be set as primary download method when configured
+get_sabnzbd_api_key() {
+    local config_file="${PROJECT_ROOT}/data/sabnzbd/config/sabnzbd.ini"
+    if [ -f "$config_file" ]; then
+        grep -oP '^api_key\s*=\s*\K\S+' "$config_file" 2>/dev/null || true
+    fi
+}
+
+# Try to get SABnzbd API key from config or .env
+if [ -z "${SABNZBD_API_KEY:-}" ]; then
+    SABNZBD_API_KEY=$(get_sabnzbd_api_key)
+    if [ -n "$SABNZBD_API_KEY" ] && [ "$SABNZBD_API_KEY" != "changeme" ]; then
+        print_success "SABnzbd API key found - Usenet will be primary download method"
+        update_env_api_key "SABNZBD_API_KEY" "$SABNZBD_API_KEY"
+    else
+        SABNZBD_API_KEY=""
+        print_info "SABnzbd not configured - BitTorrent will be primary download method"
+    fi
+else
+    print_success "SABnzbd API key loaded from .env - Usenet will be primary"
+fi
+
+# ============================================
 # QBITTORRENT CONFIGURATION
 # ============================================
 
@@ -338,22 +365,93 @@ if [ -z "$PROWLARR_API_KEY" ]; then
 else
     print_success "Prowlarr API key: $PROWLARR_API_KEY"
 
-    # Add FlareSolverr to Prowlarr
+    # Update .env with Prowlarr API key (only if not already set)
+    update_env_api_key "PROWLARR_API_KEY" "$PROWLARR_API_KEY"
+
+    # Create FlareSolverr tag for indexers that need CloudFlare bypass
+    print_info "Creating FlareSolverr tag..."
+    FLARESOLVERR_TAG_ID=$(curl -s -X POST "http://localhost:9696/api/v1/tag" \
+        -H "X-Api-Key: $PROWLARR_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{"label": "flaresolverr"}' 2>/dev/null | grep -oP '"id":\s*\K\d+' || echo "")
+
+    if [ -z "$FLARESOLVERR_TAG_ID" ]; then
+        # Tag might already exist, get its ID
+        FLARESOLVERR_TAG_ID=$(curl -s "http://localhost:9696/api/v1/tag" \
+            -H "X-Api-Key: $PROWLARR_API_KEY" 2>/dev/null | grep -oP '"id":\s*\K\d+' | head -1 || echo "1")
+    fi
+
+    # Add FlareSolverr to Prowlarr with tag and increased timeout
     print_info "Adding FlareSolverr to Prowlarr..."
     curl -s -X POST "http://localhost:9696/api/v1/indexerproxy" \
         -H "X-Api-Key: $PROWLARR_API_KEY" \
         -H "Content-Type: application/json" \
-        -d '{
-            "name": "FlareSolverr",
-            "fields": [
-                {"name": "host", "value": "http://flaresolverr:8191"},
-                {"name": "requestTimeout", "value": 60}
+        -d "{
+            \"name\": \"FlareSolverr\",
+            \"fields\": [
+                {\"name\": \"host\", \"value\": \"http://flaresolverr:8191\"},
+                {\"name\": \"requestTimeout\", \"value\": 120}
             ],
-            "implementationName": "FlareSolverr",
-            "implementation": "FlareSolverr",
-            "configContract": "FlareSolverrSettings",
-            "tags": []
-        }' > /dev/null && print_success "FlareSolverr added to Prowlarr" || print_warning "FlareSolverr may already exist"
+            \"implementationName\": \"FlareSolverr\",
+            \"implementation\": \"FlareSolverr\",
+            \"configContract\": \"FlareSolverrSettings\",
+            \"tags\": [${FLARESOLVERR_TAG_ID:-1}]
+        }" > /dev/null && print_success "FlareSolverr added to Prowlarr" || print_warning "FlareSolverr may already exist"
+
+    # ============================================
+    # ADD PUBLIC INDEXERS TO PROWLARR
+    # ============================================
+
+    print_info "Adding public torrent indexers to Prowlarr..."
+
+    # Function to add a public indexer
+    # Usage: add_public_indexer "Name" "definition" [download_link] [tags_json]
+    add_public_indexer() {
+        local name="$1"
+        local definition="$2"
+        local download_link="${3:-1}"  # 1 = magnet (default)
+        local tags="${4:-[]}"          # Optional tags array (e.g., "[1]" for flaresolverr)
+
+        # Check if indexer already exists
+        EXISTING=$(curl -s "http://localhost:9696/api/v1/indexer" \
+            -H "X-Api-Key: $PROWLARR_API_KEY" 2>/dev/null | grep -o "\"name\":\"${name}\"" || true)
+
+        if [ -n "$EXISTING" ]; then
+            print_info "  ${name} already exists, skipping"
+            return 0
+        fi
+
+        curl -s -X POST "http://localhost:9696/api/v1/indexer" \
+            -H "X-Api-Key: $PROWLARR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"name\": \"${name}\",
+                \"definitionName\": \"${definition}\",
+                \"enable\": true,
+                \"redirect\": false,
+                \"appProfileId\": 1,
+                \"priority\": 25,
+                \"fields\": [
+                    {\"name\": \"definitionFile\", \"value\": \"${definition}\"}
+                ],
+                \"implementationName\": \"Cardigann\",
+                \"implementation\": \"Cardigann\",
+                \"configContract\": \"CardigannSettings\",
+                \"tags\": ${tags}
+            }" > /dev/null 2>&1 && print_success "  ${name} added" || print_warning "  Failed to add ${name}"
+    }
+
+    # Add popular public indexers for movies and TV
+    # 1337x requires FlareSolverr for CloudFlare bypass
+    add_public_indexer "1337x" "1337x" 1 "[${FLARESOLVERR_TAG_ID:-1}]"
+    # These indexers don't need FlareSolverr
+    add_public_indexer "EZTV" "eztv" 1 "[]"
+    add_public_indexer "YTS" "yts" 1 "[]"
+    add_public_indexer "LimeTorrents" "limetorrents" 1 "[]"
+    add_public_indexer "The Pirate Bay" "thepiratebay" 1 "[]"
+    # Note: TorrentGalaxy definition doesn't exist in Prowlarr, skipped
+
+    # Note: Indexer sync will be triggered AFTER apps are linked to Prowlarr
 
     # Configure download clients in Prowlarr
     print_info "Adding download clients to Prowlarr..."
@@ -362,28 +460,28 @@ else
     curl -s -X POST "http://localhost:9696/api/v1/downloadclient" \
         -H "X-Api-Key: $PROWLARR_API_KEY" \
         -H "Content-Type: application/json" \
-        -d '{
-            "enable": true,
-            "protocol": "torrent",
-            "priority": 1,
-            "name": "qBittorrent",
-            "fields": [
-                {"name": "host", "value": "qbittorrent"},
-                {"name": "port", "value": 8080},
-                {"name": "urlBase", "value": ""},
-                {"name": "username", "value": "admin"},
-                {"name": "password", "value": "adminadmin"},
-                {"name": "category", "value": "prowlarr"},
-                {"name": "recentTvPriority", "value": 0},
-                {"name": "olderTvPriority", "value": 0},
-                {"name": "recentMoviePriority", "value": 0},
-                {"name": "olderMoviePriority", "value": 0}
+        -d "{
+            \"enable\": true,
+            \"protocol\": \"torrent\",
+            \"priority\": 1,
+            \"name\": \"qBittorrent\",
+            \"fields\": [
+                {\"name\": \"host\", \"value\": \"qbittorrent\"},
+                {\"name\": \"port\", \"value\": 8080},
+                {\"name\": \"urlBase\", \"value\": \"\"},
+                {\"name\": \"username\", \"value\": \"${QBIT_USER:-admin}\"},
+                {\"name\": \"password\", \"value\": \"${QBIT_PASS:-adminadmin}\"},
+                {\"name\": \"category\", \"value\": \"prowlarr\"},
+                {\"name\": \"recentTvPriority\", \"value\": 0},
+                {\"name\": \"olderTvPriority\", \"value\": 0},
+                {\"name\": \"recentMoviePriority\", \"value\": 0},
+                {\"name\": \"olderMoviePriority\", \"value\": 0}
             ],
-            "implementationName": "qBittorrent",
-            "implementation": "QBittorrent",
-            "configContract": "QBittorrentSettings",
-            "tags": []
-        }' > /dev/null && print_success "qBittorrent added to Prowlarr" || print_warning "qBittorrent may already exist"
+            \"implementationName\": \"qBittorrent\",
+            \"implementation\": \"QBittorrent\",
+            \"configContract\": \"QBittorrentSettings\",
+            \"tags\": []
+        }" > /dev/null && print_success "qBittorrent added to Prowlarr" || print_warning "qBittorrent may already exist"
 fi
 
 # ============================================
@@ -411,37 +509,43 @@ else
         -d '{"path": "/media/tv"}' > /dev/null && \
         print_success "Root folder added" || print_warning "Root folder may already exist"
 
+    # Determine qBittorrent priority (2 if SABnzbd is primary, 1 otherwise)
+    QBIT_PRIORITY=1
+    if [ -n "${SABNZBD_API_KEY:-}" ]; then
+        QBIT_PRIORITY=2
+    fi
+
     # Add qBittorrent download client
-    print_info "Adding qBittorrent to Sonarr..."
+    print_info "Adding qBittorrent to Sonarr (priority ${QBIT_PRIORITY})..."
     curl -s -X POST "http://localhost:8989/api/v3/downloadclient" \
         -H "X-Api-Key: $SONARR_API_KEY" \
         -H "Content-Type: application/json" \
-        -d '{
-            "enable": true,
-            "protocol": "torrent",
-            "priority": 1,
-            "removeCompletedDownloads": true,
-            "removeFailedDownloads": true,
-            "name": "qBittorrent",
-            "fields": [
-                {"name": "host", "value": "qbittorrent"},
-                {"name": "port", "value": 8080},
-                {"name": "urlBase", "value": ""},
-                {"name": "username", "value": "admin"},
-                {"name": "password", "value": "adminadmin"},
-                {"name": "tvCategory", "value": "tv"},
-                {"name": "recentTvPriority", "value": 0},
-                {"name": "olderTvPriority", "value": 0}
+        -d "{
+            \"enable\": true,
+            \"protocol\": \"torrent\",
+            \"priority\": ${QBIT_PRIORITY},
+            \"removeCompletedDownloads\": true,
+            \"removeFailedDownloads\": true,
+            \"name\": \"qBittorrent\",
+            \"fields\": [
+                {\"name\": \"host\", \"value\": \"qbittorrent\"},
+                {\"name\": \"port\", \"value\": 8080},
+                {\"name\": \"urlBase\", \"value\": \"\"},
+                {\"name\": \"username\", \"value\": \"${QBIT_USER:-admin}\"},
+                {\"name\": \"password\", \"value\": \"${QBIT_PASS:-adminadmin}\"},
+                {\"name\": \"tvCategory\", \"value\": \"tv\"},
+                {\"name\": \"recentTvPriority\", \"value\": 0},
+                {\"name\": \"olderTvPriority\", \"value\": 0}
             ],
-            "implementationName": "qBittorrent",
-            "implementation": "QBittorrent",
-            "configContract": "QBittorrentSettings",
-            "tags": []
-        }' > /dev/null && print_success "qBittorrent added" || print_warning "qBittorrent may already exist"
+            \"implementationName\": \"qBittorrent\",
+            \"implementation\": \"QBittorrent\",
+            \"configContract\": \"QBittorrentSettings\",
+            \"tags\": []
+        }" > /dev/null && print_success "qBittorrent added" || print_warning "qBittorrent may already exist"
 
-    # Add SABnzbd if configured
+    # Add SABnzbd if configured (priority 1 = primary)
     if [ -n "${SABNZBD_API_KEY:-}" ]; then
-        print_info "Adding SABnzbd to Sonarr..."
+        print_info "Adding SABnzbd to Sonarr (priority 1 - primary)..."
         curl -s -X POST "http://localhost:8989/api/v3/downloadclient" \
             -H "X-Api-Key: $SONARR_API_KEY" \
             -H "Content-Type: application/json" \
@@ -491,37 +595,43 @@ else
         -d '{"path": "/media/movies"}' > /dev/null && \
         print_success "Root folder added" || print_warning "Root folder may already exist"
 
+    # Determine qBittorrent priority (2 if SABnzbd is primary, 1 otherwise)
+    QBIT_PRIORITY=1
+    if [ -n "${SABNZBD_API_KEY:-}" ]; then
+        QBIT_PRIORITY=2
+    fi
+
     # Add qBittorrent download client
-    print_info "Adding qBittorrent to Radarr..."
+    print_info "Adding qBittorrent to Radarr (priority ${QBIT_PRIORITY})..."
     curl -s -X POST "http://localhost:7878/api/v3/downloadclient" \
         -H "X-Api-Key: $RADARR_API_KEY" \
         -H "Content-Type: application/json" \
-        -d '{
-            "enable": true,
-            "protocol": "torrent",
-            "priority": 1,
-            "removeCompletedDownloads": true,
-            "removeFailedDownloads": true,
-            "name": "qBittorrent",
-            "fields": [
-                {"name": "host", "value": "qbittorrent"},
-                {"name": "port", "value": 8080},
-                {"name": "urlBase", "value": ""},
-                {"name": "username", "value": "admin"},
-                {"name": "password", "value": "adminadmin"},
-                {"name": "movieCategory", "value": "movies"},
-                {"name": "recentMoviePriority", "value": 0},
-                {"name": "olderMoviePriority", "value": 0}
+        -d "{
+            \"enable\": true,
+            \"protocol\": \"torrent\",
+            \"priority\": ${QBIT_PRIORITY},
+            \"removeCompletedDownloads\": true,
+            \"removeFailedDownloads\": true,
+            \"name\": \"qBittorrent\",
+            \"fields\": [
+                {\"name\": \"host\", \"value\": \"qbittorrent\"},
+                {\"name\": \"port\", \"value\": 8080},
+                {\"name\": \"urlBase\", \"value\": \"\"},
+                {\"name\": \"username\", \"value\": \"${QBIT_USER:-admin}\"},
+                {\"name\": \"password\", \"value\": \"${QBIT_PASS:-adminadmin}\"},
+                {\"name\": \"movieCategory\", \"value\": \"movies\"},
+                {\"name\": \"recentMoviePriority\", \"value\": 0},
+                {\"name\": \"olderMoviePriority\", \"value\": 0}
             ],
-            "implementationName": "qBittorrent",
-            "implementation": "QBittorrent",
-            "configContract": "QBittorrentSettings",
-            "tags": []
-        }' > /dev/null && print_success "qBittorrent added" || print_warning "qBittorrent may already exist"
+            \"implementationName\": \"qBittorrent\",
+            \"implementation\": \"QBittorrent\",
+            \"configContract\": \"QBittorrentSettings\",
+            \"tags\": []
+        }" > /dev/null && print_success "qBittorrent added" || print_warning "qBittorrent may already exist"
 
-    # Add SABnzbd if configured
+    # Add SABnzbd if configured (priority 1 = primary)
     if [ -n "${SABNZBD_API_KEY:-}" ]; then
-        print_info "Adding SABnzbd to Radarr..."
+        print_info "Adding SABnzbd to Radarr (priority 1 - primary)..."
         curl -s -X POST "http://localhost:7878/api/v3/downloadclient" \
             -H "X-Api-Key: $RADARR_API_KEY" \
             -H "Content-Type: application/json" \
@@ -560,43 +670,54 @@ if [ -z "$LIDARR_API_KEY" ]; then
 else
     print_success "Lidarr API key: $LIDARR_API_KEY"
 
-    # Add root folder
+    # Add root folder (Lidarr requires quality and metadata profile IDs)
     print_info "Adding root folder to Lidarr..."
+    # Get first quality profile ID
+    LIDARR_QUALITY_PROFILE=$(curl -s "http://localhost:8686/api/v1/qualityprofile" -H "X-Api-Key: $LIDARR_API_KEY" | grep -oP '"id":\s*\K\d+' | head -1 || echo "1")
+    # Get first metadata profile ID
+    LIDARR_METADATA_PROFILE=$(curl -s "http://localhost:8686/api/v1/metadataprofile" -H "X-Api-Key: $LIDARR_API_KEY" | grep -oP '"id":\s*\K\d+' | head -1 || echo "1")
+
     curl -s -X POST "http://localhost:8686/api/v1/rootfolder" \
         -H "X-Api-Key: $LIDARR_API_KEY" \
         -H "Content-Type: application/json" \
-        -d '{"path": "/media/music", "name": "Music"}' > /dev/null && \
+        -d "{\"path\": \"/media/music\", \"name\": \"Music\", \"defaultQualityProfileId\": ${LIDARR_QUALITY_PROFILE:-1}, \"defaultMetadataProfileId\": ${LIDARR_METADATA_PROFILE:-1}}" > /dev/null && \
         print_success "Root folder added" || print_warning "Root folder may already exist"
 
+    # Determine qBittorrent priority (2 if SABnzbd is primary, 1 otherwise)
+    QBIT_PRIORITY=1
+    if [ -n "${SABNZBD_API_KEY:-}" ]; then
+        QBIT_PRIORITY=2
+    fi
+
     # Add qBittorrent download client
-    print_info "Adding qBittorrent to Lidarr..."
+    print_info "Adding qBittorrent to Lidarr (priority ${QBIT_PRIORITY})..."
     curl -s -X POST "http://localhost:8686/api/v1/downloadclient" \
         -H "X-Api-Key: $LIDARR_API_KEY" \
         -H "Content-Type: application/json" \
-        -d '{
-            "enable": true,
-            "protocol": "torrent",
-            "priority": 1,
-            "removeCompletedDownloads": true,
-            "removeFailedDownloads": true,
-            "name": "qBittorrent",
-            "fields": [
-                {"name": "host", "value": "qbittorrent"},
-                {"name": "port", "value": 8080},
-                {"name": "urlBase", "value": ""},
-                {"name": "username", "value": "admin"},
-                {"name": "password", "value": "adminadmin"},
-                {"name": "musicCategory", "value": "music"}
+        -d "{
+            \"enable\": true,
+            \"protocol\": \"torrent\",
+            \"priority\": ${QBIT_PRIORITY},
+            \"removeCompletedDownloads\": true,
+            \"removeFailedDownloads\": true,
+            \"name\": \"qBittorrent\",
+            \"fields\": [
+                {\"name\": \"host\", \"value\": \"qbittorrent\"},
+                {\"name\": \"port\", \"value\": 8080},
+                {\"name\": \"urlBase\", \"value\": \"\"},
+                {\"name\": \"username\", \"value\": \"${QBIT_USER:-admin}\"},
+                {\"name\": \"password\", \"value\": \"${QBIT_PASS:-adminadmin}\"},
+                {\"name\": \"musicCategory\", \"value\": \"music\"}
             ],
-            "implementationName": "qBittorrent",
-            "implementation": "QBittorrent",
-            "configContract": "QBittorrentSettings",
-            "tags": []
-        }' > /dev/null && print_success "qBittorrent added" || print_warning "qBittorrent may already exist"
+            \"implementationName\": \"qBittorrent\",
+            \"implementation\": \"QBittorrent\",
+            \"configContract\": \"QBittorrentSettings\",
+            \"tags\": []
+        }" > /dev/null && print_success "qBittorrent added" || print_warning "qBittorrent may already exist"
 
-    # Add SABnzbd if configured
+    # Add SABnzbd if configured (priority 1 = primary)
     if [ -n "${SABNZBD_API_KEY:-}" ]; then
-        print_info "Adding SABnzbd to Lidarr..."
+        print_info "Adding SABnzbd to Lidarr (priority 1 - primary)..."
         curl -s -X POST "http://localhost:8686/api/v1/downloadclient" \
             -H "X-Api-Key: $LIDARR_API_KEY" \
             -H "Content-Type: application/json" \
@@ -636,7 +757,7 @@ if [ -n "$PROWLARR_API_KEY" ]; then
             -H "Content-Type: application/json" \
             -d "{
                 \"name\": \"Sonarr\",
-                \"syncLevel\": \"addAndRemove\",
+                \"syncLevel\": \"fullSync\",
                 \"fields\": [
                     {\"name\": \"prowlarrUrl\", \"value\": \"http://prowlarr:9696\"},
                     {\"name\": \"baseUrl\", \"value\": \"http://sonarr:8989\"},
@@ -658,7 +779,7 @@ if [ -n "$PROWLARR_API_KEY" ]; then
             -H "Content-Type: application/json" \
             -d "{
                 \"name\": \"Radarr\",
-                \"syncLevel\": \"addAndRemove\",
+                \"syncLevel\": \"fullSync\",
                 \"fields\": [
                     {\"name\": \"prowlarrUrl\", \"value\": \"http://prowlarr:9696\"},
                     {\"name\": \"baseUrl\", \"value\": \"http://radarr:7878\"},
@@ -680,7 +801,7 @@ if [ -n "$PROWLARR_API_KEY" ]; then
             -H "Content-Type: application/json" \
             -d "{
                 \"name\": \"Lidarr\",
-                \"syncLevel\": \"addAndRemove\",
+                \"syncLevel\": \"fullSync\",
                 \"fields\": [
                     {\"name\": \"prowlarrUrl\", \"value\": \"http://prowlarr:9696\"},
                     {\"name\": \"baseUrl\", \"value\": \"http://lidarr:8686\"},
@@ -693,6 +814,13 @@ if [ -n "$PROWLARR_API_KEY" ]; then
                 \"tags\": []
             }" > /dev/null && print_success "Lidarr linked to Prowlarr" || print_warning "Lidarr may already be linked"
     fi
+
+    # Now trigger sync to push indexers to all linked *arr apps
+    print_info "Triggering Prowlarr sync to push indexers to *arr apps..."
+    sleep 2  # Give Prowlarr a moment to register the apps
+    curl -s -X POST "http://localhost:9696/api/v1/applicationsindexersync" \
+        -H "X-Api-Key: $PROWLARR_API_KEY" > /dev/null 2>&1 && \
+        print_success "Indexers synced to Sonarr, Radarr, and Lidarr" || print_warning "Sync may need to be triggered manually"
 fi
 
 # ============================================
@@ -764,13 +892,7 @@ fi
 
 print_section "Usenet Configuration (Optional)"
 
-# Get SABnzbd API key from config file
-get_sabnzbd_api_key() {
-    local config_file="${PROJECT_ROOT}/data/sabnzbd/config/sabnzbd.ini"
-    if [ -f "$config_file" ]; then
-        grep -oP '^api_key\s*=\s*\K\S+' "$config_file" 2>/dev/null || true
-    fi
-}
+# Note: get_sabnzbd_api_key() is defined earlier in the script
 
 # Check if SABnzbd needs initial setup wizard
 check_sabnzbd_ready() {
@@ -849,6 +971,11 @@ if check_sabnzbd_ready; then
             > /dev/null 2>&1
 
         print_success "SABnzbd folders configured: /downloads/{incomplete,complete,watch}"
+
+        # Create music category for Lidarr
+        print_info "Creating SABnzbd music category..."
+        curl -s "http://localhost:8085/api?mode=set_config&apikey=${SABNZBD_API_KEY}&section=categories&keyword=music&name=music" > /dev/null 2>&1 && \
+            print_success "Music category created" || print_warning "Music category may already exist"
     fi
 fi
 
@@ -967,8 +1094,9 @@ if [[ "$CONFIGURE_NZBGEEK" =~ ^[Yy]$ ]]; then
             -d "{
                 \"name\": \"NZBgeek\",
                 \"enable\": true,
+                \"redirect\": true,
                 \"appProfileId\": 1,
-                \"priority\": 25,
+                \"priority\": 10,
                 \"fields\": [
                     {\"name\": \"baseUrl\", \"value\": \"https://api.nzbgeek.info\"},
                     {\"name\": \"apiPath\", \"value\": \"/api\"},
@@ -981,12 +1109,43 @@ if [[ "$CONFIGURE_NZBGEEK" =~ ^[Yy]$ ]]; then
                 \"configContract\": \"NewznabSettings\",
                 \"tags\": []
             }" > /dev/null 2>&1 && print_success "NZBgeek added to Prowlarr" || print_warning "NZBgeek may already exist or failed to add"
+
+        # Trigger sync to push NZBgeek to *arr apps
+        curl -s -X POST "http://localhost:9696/api/v1/applicationsindexersync" \
+            -H "X-Api-Key: $PROWLARR_API_KEY" > /dev/null 2>&1
     fi
 else
-    if [ -n "$(grep "^NZBGEEK_API_KEY=" "$PROJECT_ROOT/.env" 2>/dev/null | cut -d'=' -f2)" ]; then
-        print_info "NZBgeek already configured"
+    # Check if NZBgeek key exists in .env and add it to Prowlarr automatically
+    NZBGEEK_API_KEY=$(grep "^NZBGEEK_API_KEY=" "$PROJECT_ROOT/.env" 2>/dev/null | cut -d'=' -f2 | tr -d "'" | tr -d '"')
+    if [ -n "$NZBGEEK_API_KEY" ] && [ -n "$PROWLARR_API_KEY" ]; then
+        print_info "NZBgeek API key found in .env - adding to Prowlarr..."
+        curl -s -X POST "http://localhost:9696/api/v1/indexer" \
+            -H "X-Api-Key: $PROWLARR_API_KEY" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"name\": \"NZBgeek\",
+                \"enable\": true,
+                \"redirect\": true,
+                \"appProfileId\": 1,
+                \"priority\": 10,
+                \"fields\": [
+                    {\"name\": \"baseUrl\", \"value\": \"https://api.nzbgeek.info\"},
+                    {\"name\": \"apiPath\", \"value\": \"/api\"},
+                    {\"name\": \"apiKey\", \"value\": \"${NZBGEEK_API_KEY}\"},
+                    {\"name\": \"vipExpiration\", \"value\": \"\"},
+                    {\"name\": \"baseSettings.limitsUnit\", \"value\": 0}
+                ],
+                \"implementationName\": \"Newznab\",
+                \"implementation\": \"Newznab\",
+                \"configContract\": \"NewznabSettings\",
+                \"tags\": []
+            }" > /dev/null 2>&1 && print_success "NZBgeek added to Prowlarr" || print_warning "NZBgeek may already exist or failed to add"
+
+        # Trigger sync to push NZBgeek to *arr apps
+        curl -s -X POST "http://localhost:9696/api/v1/applicationsindexersync" \
+            -H "X-Api-Key: $PROWLARR_API_KEY" > /dev/null 2>&1
     else
-        print_info "Skipping NZBgeek configuration"
+        print_info "Skipping NZBgeek configuration (no API key in .env)"
     fi
 fi
 
@@ -1224,46 +1383,35 @@ else
 fi
 
 # Configure MakeMKV settings for better read reliability
-MAKEMKV_DIR="${PROJECT_ROOT}/data/arm/config/.MakeMKV"
-MAKEMKV_SETTINGS="${MAKEMKV_DIR}/settings.conf"
+# Note: MakeMKV settings are stored inside the container at /home/arm/.MakeMKV/settings.conf
+# We use docker exec to configure them since the path isn't mounted from the host
 
-print_info "Configuring MakeMKV settings..."
+print_info "Configuring MakeMKV settings inside ARM container..."
 
-# Create MakeMKV config directory if needed
-mkdir -p "$MAKEMKV_DIR"
+# Check if ARM container is running
+if docker ps --format '{{.Names}}' | grep -q "^arm$"; then
+    # Create MakeMKV config directory inside container
+    docker exec arm mkdir -p /home/arm/.MakeMKV 2>/dev/null || true
 
-# Create or update settings.conf with optimized values
-if [ ! -f "$MAKEMKV_SETTINGS" ]; then
-    cat > "$MAKEMKV_SETTINGS" << 'EOF'
-# MakeMKV settings for improved read reliability
-# See: https://forum.makemkv.com/forum/viewtopic.php?t=8820
+    # Check if settings already exist and have the optimized values
+    EXISTING_SETTINGS=$(docker exec arm cat /home/arm/.MakeMKV/settings.conf 2>/dev/null || echo "")
 
-# Increase retry count for read errors (default: 5)
-io_ErrorRetryCount = "20"
+    if echo "$EXISTING_SETTINGS" | grep -q "io_ErrorRetryCount = \"20\""; then
+        print_info "MakeMKV settings already optimized"
+    else
+        # Create optimized settings (preserving any existing app_Key)
+        APP_KEY=$(echo "$EXISTING_SETTINGS" | grep "^app_Key" || echo "")
 
-# Larger read buffer for better performance (in MB)
-io_RBufSizeMB = "128"
-EOF
-    print_success "Created MakeMKV settings with optimized values"
+        docker exec arm bash -c "cat > /home/arm/.MakeMKV/settings.conf << 'MKVSETTINGS'
+${APP_KEY}
+io_ErrorRetryCount = \"20\"
+io_RBufSizeMB = \"128\"
+MKVSETTINGS"
+        print_success "MakeMKV settings optimized (retry=20, buffer=128MB)"
+    fi
 else
-    # Update existing settings if needed
-    if ! grep -q "io_ErrorRetryCount" "$MAKEMKV_SETTINGS"; then
-        echo 'io_ErrorRetryCount = "20"' >> "$MAKEMKV_SETTINGS"
-        print_success "Added io_ErrorRetryCount = 20"
-    else
-        print_info "io_ErrorRetryCount already configured"
-    fi
-
-    if ! grep -q "io_RBufSizeMB" "$MAKEMKV_SETTINGS"; then
-        echo 'io_RBufSizeMB = "128"' >> "$MAKEMKV_SETTINGS"
-        print_success "Added io_RBufSizeMB = 128"
-    else
-        print_info "io_RBufSizeMB already configured"
-    fi
+    print_warning "ARM container not running - MakeMKV settings will be configured when container starts"
 fi
-
-# Set correct ownership for MakeMKV config
-chown -R ${PUID:-1000}:${PGID:-1000} "$MAKEMKV_DIR" 2>/dev/null || true
 
 # ============================================
 # TDARR CONFIGURATION
@@ -1354,21 +1502,27 @@ else
                     \"name\": \"${FLOW_NAME}\",
                     \"description\": \"Auto-created: H.265 ${GPU_NAME} transcoding for media files\",
                     \"flowPlugins\": [
-                        {\"name\":\"Input File\",\"sourceRepo\":\"Community\",\"pluginName\":\"inputFile\",\"version\":\"1.0.0\",\"id\":\"inp1\",\"position\":{\"x\":696,\"y\":180},\"flowType\":\"flow\"},
-                        {\"name\":\"Check File Medium\",\"sourceRepo\":\"Community\",\"pluginName\":\"checkFileMedium\",\"version\":\"1.0.0\",\"id\":\"chk1\",\"position\":{\"x\":696,\"y\":252}},
-                        {\"name\":\"Begin Command\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandStart\",\"version\":\"1.0.0\",\"id\":\"cmd1\",\"position\":{\"x\":696,\"y\":324}},
-                        {\"name\":\"Set Video Encoder\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandSetVideoEncoder\",\"version\":\"1.0.0\",\"id\":\"enc1\",\"position\":{\"x\":696,\"y\":396},\"inputsDB\":{\"outputCodec\":\"hevc\",\"ffmpegPresetEnabled\":true,\"ffmpegPreset\":\"fast\",\"ffmpegQualityEnabled\":true,\"ffmpegQuality\":22,\"hardwareEncoding\":${HW_ENCODING},\"hardwareType\":\"${GPU_TYPE}\",\"hardwareDecoding\":${HW_DECODING},\"forceEncoding\":true}},
-                        {\"name\":\"Set Container\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandSetContainer\",\"version\":\"1.0.0\",\"id\":\"con1\",\"position\":{\"x\":696,\"y\":468},\"inputsDB\":{\"container\":\"mkv\"}},
-                        {\"name\":\"Execute\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandExecute\",\"version\":\"1.0.0\",\"id\":\"exe1\",\"position\":{\"x\":696,\"y\":540}},
-                        {\"name\":\"Replace Original File\",\"sourceRepo\":\"Community\",\"pluginName\":\"replaceOriginalFile\",\"version\":\"1.0.0\",\"id\":\"rep1\",\"position\":{\"x\":696,\"y\":612}}
+                        {\"name\":\"Input File\",\"sourceRepo\":\"Community\",\"pluginName\":\"inputFile\",\"version\":\"1.0.0\",\"id\":\"inp1\",\"position\":{\"x\":696,\"y\":180},\"flowType\":\"flow\",\"fpEnabled\":true},
+                        {\"name\":\"Check File Medium\",\"sourceRepo\":\"Community\",\"pluginName\":\"checkFileMedium\",\"version\":\"1.0.0\",\"id\":\"chk1\",\"position\":{\"x\":696,\"y\":240},\"fpEnabled\":true},
+                        {\"name\":\"Check Video Codec (hevc)\",\"sourceRepo\":\"Community\",\"pluginName\":\"checkVideoCodec\",\"version\":\"1.0.0\",\"id\":\"cvc1\",\"position\":{\"x\":696,\"y\":300},\"fpEnabled\":true,\"inputsDB\":{\"codec\":\"hevc\"}},
+                        {\"name\":\"Begin Command\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandStart\",\"version\":\"1.0.0\",\"id\":\"cmd1\",\"position\":{\"x\":696,\"y\":360},\"fpEnabled\":true},
+                        {\"name\":\"Set Video Encoder\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandSetVideoEncoder\",\"version\":\"1.0.0\",\"id\":\"enc1\",\"position\":{\"x\":696,\"y\":420},\"fpEnabled\":true,\"inputsDB\":{\"hardwareType\":\"${GPU_TYPE}\",\"ffmpegQuality\":\"22\"}},
+                        {\"name\":\"Set Container\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandSetContainer\",\"version\":\"1.0.0\",\"id\":\"con1\",\"position\":{\"x\":696,\"y\":480},\"fpEnabled\":true},
+                        {\"name\":\"Execute\",\"sourceRepo\":\"Community\",\"pluginName\":\"ffmpegCommandExecute\",\"version\":\"1.0.0\",\"id\":\"exe1\",\"position\":{\"x\":696,\"y\":540},\"fpEnabled\":true},
+                        {\"name\":\"Replace Original File\",\"sourceRepo\":\"Community\",\"pluginName\":\"replaceOriginalFile\",\"version\":\"1.0.0\",\"id\":\"rep1\",\"position\":{\"x\":696,\"y\":600},\"fpEnabled\":true},
+                        {\"name\":\"Notify Radarr\",\"sourceRepo\":\"Community\",\"pluginName\":\"notifyRadarrOrSonarr\",\"version\":\"2.0.0\",\"id\":\"ntr1\",\"position\":{\"x\":696,\"y\":660},\"fpEnabled\":true,\"inputsDB\":{\"arr\":\"radarr\",\"arr_host\":\"http://radarr:7878\",\"arr_api_key\":\"${RADARR_API_KEY}\"}},
+                        {\"name\":\"Notify Sonarr\",\"sourceRepo\":\"Community\",\"pluginName\":\"notifyRadarrOrSonarr\",\"version\":\"2.0.0\",\"id\":\"nts1\",\"position\":{\"x\":696,\"y\":720},\"fpEnabled\":true,\"inputsDB\":{\"arr\":\"sonarr\",\"arr_host\":\"http://sonarr:8989\",\"arr_api_key\":\"${SONARR_API_KEY}\"}}
                     ],
                     \"flowEdges\": [
-                        {\"source\":\"inp1\",\"sourceHandle\":\"1\",\"target\":\"chk1\",\"id\":\"e1\",\"type\":\"smoothstep\"},
-                        {\"source\":\"chk1\",\"sourceHandle\":\"2\",\"target\":\"cmd1\",\"id\":\"e2\",\"type\":\"smoothstep\"},
-                        {\"source\":\"cmd1\",\"sourceHandle\":\"1\",\"target\":\"enc1\",\"id\":\"e3\",\"type\":\"smoothstep\"},
-                        {\"source\":\"enc1\",\"sourceHandle\":\"1\",\"target\":\"con1\",\"id\":\"e4\",\"type\":\"smoothstep\"},
-                        {\"source\":\"con1\",\"sourceHandle\":\"1\",\"target\":\"exe1\",\"id\":\"e5\",\"type\":\"smoothstep\"},
-                        {\"source\":\"exe1\",\"sourceHandle\":\"1\",\"target\":\"rep1\",\"id\":\"e6\",\"type\":\"smoothstep\"}
+                        {\"source\":\"inp1\",\"sourceHandle\":\"1\",\"target\":\"chk1\",\"id\":\"e1\",\"type\":\"smoothstep\",\"animated\":true},
+                        {\"source\":\"chk1\",\"sourceHandle\":\"1\",\"target\":\"cvc1\",\"id\":\"e2\",\"type\":\"smoothstep\",\"animated\":true},
+                        {\"source\":\"cvc1\",\"sourceHandle\":\"2\",\"target\":\"cmd1\",\"id\":\"e3\",\"type\":\"smoothstep\",\"animated\":true},
+                        {\"source\":\"cmd1\",\"sourceHandle\":\"1\",\"target\":\"enc1\",\"id\":\"e4\",\"type\":\"smoothstep\",\"animated\":true},
+                        {\"source\":\"enc1\",\"sourceHandle\":\"1\",\"target\":\"con1\",\"id\":\"e5\",\"type\":\"smoothstep\",\"animated\":true},
+                        {\"source\":\"con1\",\"sourceHandle\":\"1\",\"target\":\"exe1\",\"id\":\"e6\",\"type\":\"smoothstep\",\"animated\":true},
+                        {\"source\":\"exe1\",\"sourceHandle\":\"1\",\"target\":\"rep1\",\"id\":\"e7\",\"type\":\"smoothstep\",\"animated\":true},
+                        {\"source\":\"rep1\",\"sourceHandle\":\"1\",\"target\":\"ntr1\",\"id\":\"e8\",\"type\":\"smoothstep\",\"animated\":true},
+                        {\"source\":\"ntr1\",\"sourceHandle\":\"2\",\"target\":\"nts1\",\"id\":\"e9\",\"type\":\"smoothstep\",\"animated\":true}
                     ]
                 }
             }
@@ -1430,7 +1584,7 @@ else
                     \"processLibrary\": true,
                     \"processTranscodes\": true,
                     \"processHealthChecks\": true,
-                    \"scanOnStart\": false,
+                    \"scanOnStart\": true,
                     \"exifToolScan\": true,
                     \"mediaInfoScan\": true,
                     \"ffprobeShowData\": false,
@@ -1524,7 +1678,7 @@ else
                     \"processLibrary\": true,
                     \"processTranscodes\": true,
                     \"processHealthChecks\": true,
-                    \"scanOnStart\": false,
+                    \"scanOnStart\": true,
                     \"exifToolScan\": true,
                     \"mediaInfoScan\": true,
                     \"ffprobeShowData\": false,
@@ -1625,7 +1779,7 @@ print_success "ARM will output raw MKV files → Tdarr will transcode automatica
 print_section "Configuration Complete!"
 
 print_info "Services configured:"
-print_success "✓ Prowlarr - Indexer management with FlareSolverr"
+print_success "✓ Prowlarr - Indexer management with FlareSolverr and public indexers"
 print_success "✓ Sonarr - TV shows with download clients"
 print_success "✓ Radarr - Movies with download clients"
 print_success "✓ Lidarr - Music with download clients"
@@ -1643,9 +1797,6 @@ print_info "API Keys saved to .env:"
 
 echo ""
 print_info "Still need manual configuration:"
-if [ -z "$(grep "^NZBGEEK_API_KEY=" "$PROJECT_ROOT/.env" 2>/dev/null | cut -d'=' -f2)" ]; then
-    print_warning "⚠ Prowlarr: Add indexers at http://localhost:9696"
-fi
 
 # Get qBittorrent temporary password from logs
 QBIT_TEMP_PASS=$(docker compose logs qbittorrent 2>/dev/null | grep -oP 'temporary password is provided for this session: \K\S+' | tail -1 || true)
