@@ -16,11 +16,18 @@ x-logging: &default-logging
 # Security hardening - applied to all containers
 # no-new-privileges: Prevents privilege escalation via setuid/setgid binaries
 # cap_drop ALL: Removes all Linux capabilities (principle of least privilege)
+# cap_add: Restores minimum required capabilities for container functionality
 x-security: &default-security
   security_opt:
     - no-new-privileges:true
   cap_drop:
     - ALL
+  cap_add:
+    - CHOWN           # Change file ownership
+    - SETUID          # Switch user ID (needed for init systems)
+    - SETGID          # Switch group ID (needed for init systems)
+    - DAC_OVERRIDE    # Bypass file permission checks
+    - FOWNER          # Bypass permission checks requiring file owner
 
 services:
   # ============================================
