@@ -63,7 +63,7 @@ EOF
     return 0
 }
 
-# Update API key in .env (only if not already set to a valid value)
+# Update API key in .env (always updates to the authoritative value from container config)
 # Usage: update_env_api_key <key_name> <key_value> [env_file]
 update_env_api_key() {
     local key_name="$1"
@@ -78,14 +78,7 @@ update_env_api_key() {
     # Skip if already set to same value
     [[ "$existing_value" == "$key_value" ]] && return 0
 
-    # Skip if existing value looks valid (32-char hex) and is different
-    if [[ -n "$existing_value" && "$existing_value" != "your_${key_name,,}_here" ]]; then
-        if [[ "$existing_value" =~ ^[a-f0-9]{32}$ ]]; then
-            return 0
-        fi
-    fi
-
-    # Update or add the key
+    # Update or add the key (always update since container config is authoritative)
     if grep -q "^${key_name}=" "$env_file" 2>/dev/null; then
         sed -i "s/^${key_name}=.*/${key_name}=${key_value}/" "$env_file"
     else

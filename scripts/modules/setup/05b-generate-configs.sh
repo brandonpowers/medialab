@@ -1,10 +1,11 @@
 #!/bin/bash
 #
-# 04b-generate-configs.sh - Generate service config files with pre-seeded credentials
-# Creates config files for services that support pre-configuration
+# 05b-generate-configs.sh - Generate service config files with pre-seeded credentials
+# Creates config files for services that actually use pre-configuration
+# Note: *arr apps (Sonarr, Radarr, etc.) generate their own configs - we configure them via API
 #
 # Usage:
-#   ./04b-generate-configs.sh [--json] [--config file.json]
+#   ./05b-generate-configs.sh [--json] [--config file.json]
 #
 
 set -euo pipefail
@@ -64,7 +65,7 @@ generate_api_key() {
 # ============================================
 
 main() {
-    init_progress "Generate Service Configs" 6
+    init_progress "Generate Service Configs" 5
     local project_root
     project_root=$(get_project_root)
 
@@ -86,52 +87,12 @@ main() {
         language=$(get_config_value "system.language" "$language")
     fi
 
-    # Step 1: Generate *arr config.xml files
-    report_progress 1 6 "Generating *arr config files..."
+    # Note: *arr apps (Sonarr, Radarr, Lidarr, Prowlarr) generate their own config.xml
+    # with API keys on first start. We configure them via API in the configure phase.
+    # This avoids sync issues between pre-generated keys and actual container keys.
 
-    local arr_services=("sonarr:8989:9898" "radarr:7878:9899" "lidarr:8686:6869" "prowlarr:9696:9697")
-
-    for service_info in "${arr_services[@]}"; do
-        IFS=':' read -r service port ssl_port <<< "$service_info"
-        local config_dir="$project_root/data/$service/config"
-        local config_file="$config_dir/config.xml"
-
-        # Only create if directory exists but config doesn't
-        if [[ -d "$config_dir" && ! -f "$config_file" ]]; then
-            local api_key
-            api_key=$(generate_api_key)
-
-            cat > "$config_file" << EOF
-<Config>
-  <BindAddress>*</BindAddress>
-  <Port>${port}</Port>
-  <SslPort>${ssl_port}</SslPort>
-  <EnableSsl>False</EnableSsl>
-  <LaunchBrowser>False</LaunchBrowser>
-  <ApiKey>${api_key}</ApiKey>
-  <AuthenticationMethod>Forms</AuthenticationMethod>
-  <AuthenticationRequired>Enabled</AuthenticationRequired>
-  <Branch>main</Branch>
-  <LogLevel>info</LogLevel>
-  <SslCertPath></SslCertPath>
-  <SslCertPassword></SslCertPassword>
-  <UrlBase></UrlBase>
-  <InstanceName>${service^}</InstanceName>
-  <UpdateMechanism>Docker</UpdateMechanism>
-</Config>
-EOF
-            report_log "success" "Created $service config.xml with Forms auth"
-
-            # Save API key to .env
-            local env_key="${service^^}_API_KEY"
-            set_env_value "$env_key" "$api_key" "true" "$project_root/.env" || true
-        fi
-    done
-
-    report_progress 1 6 "*arr configs generated" "complete"
-
-    # Step 2: Generate qBittorrent config
-    report_progress 2 6 "Generating qBittorrent config..."
+    # Step 1: Generate qBittorrent config
+    report_progress 1 5 "Generating qBittorrent config..."
 
     local qbit_config_dir="$project_root/data/qbittorrent/config/qBittorrent"
     if [[ -d "$project_root/data/qbittorrent/config" ]]; then
@@ -160,10 +121,10 @@ EOF
         report_log "info" "qBittorrent will use default credentials initially"
     fi
 
-    report_progress 2 6 "qBittorrent config generated" "complete"
+    report_progress 1 5 "qBittorrent config generated" "complete"
 
-    # Step 3: Generate SABnzbd config
-    report_progress 3 6 "Generating SABnzbd config..."
+    # Step 2: Generate SABnzbd config
+    report_progress 2 5 "Generating SABnzbd config..."
 
     local sab_config_dir="$project_root/data/sabnzbd/config"
     local sab_config="$sab_config_dir/sabnzbd.ini"
@@ -224,10 +185,10 @@ EOF
         report_log "success" "Created SABnzbd config with credentials"
     fi
 
-    report_progress 3 6 "SABnzbd config generated" "complete"
+    report_progress 2 5 "SABnzbd config generated" "complete"
 
-    # Step 4: Generate Bazarr config
-    report_progress 4 6 "Generating Bazarr config..."
+    # Step 3: Generate Bazarr config
+    report_progress 3 5 "Generating Bazarr config..."
 
     local bazarr_config_dir="$project_root/data/bazarr/config/config"
     if [[ -d "$project_root/data/bazarr/config" ]]; then
@@ -300,10 +261,10 @@ EOF
         fi
     fi
 
-    report_progress 4 6 "Bazarr config generated" "complete"
+    report_progress 3 5 "Bazarr config generated" "complete"
 
-    # Step 5: Generate Tdarr config
-    report_progress 5 6 "Generating Tdarr config..."
+    # Step 4: Generate Tdarr config
+    report_progress 4 5 "Generating Tdarr config..."
 
     local tdarr_config_dir="$project_root/data/tdarr/configs"
     if [[ -d "$tdarr_config_dir" ]]; then
@@ -336,10 +297,10 @@ EOF
         fi
     fi
 
-    report_progress 5 6 "Tdarr config generated" "complete"
+    report_progress 4 5 "Tdarr config generated" "complete"
 
-    # Step 6: Generate Jellyfin config
-    report_progress 6 6 "Generating Jellyfin config..."
+    # Step 5: Generate Jellyfin config
+    report_progress 5 5 "Generating Jellyfin config..."
 
     local jellyfin_config_dir="$project_root/data/jellyfin/config"
     if [[ -d "$jellyfin_config_dir" ]]; then
@@ -409,7 +370,7 @@ EOF
         fi
     fi
 
-    report_progress 6 6 "Jellyfin config generated" "complete"
+    report_progress 5 5 "Jellyfin config generated" "complete"
 
     finish_progress "complete" "Service configs generated"
 }
