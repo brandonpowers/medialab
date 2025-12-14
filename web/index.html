@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Homelab Setup Wizard</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Homelab Setup Wizard</h1>
+        </header>
+
+        <!-- Progress Steps -->
+        <nav class="steps">
+            <div class="step active" data-step="1">
+                <span class="step-number">1</span>
+                <span class="step-label">Hardware</span>
+            </div>
+            <div class="step" data-step="2">
+                <span class="step-number">2</span>
+                <span class="step-label">Storage</span>
+            </div>
+            <div class="step" data-step="3">
+                <span class="step-number">3</span>
+                <span class="step-label">Admin</span>
+            </div>
+            <div class="step" data-step="4">
+                <span class="step-number">4</span>
+                <span class="step-label">Services</span>
+            </div>
+            <div class="step" data-step="5">
+                <span class="step-number">5</span>
+                <span class="step-label">Install</span>
+            </div>
+            <div class="step" data-step="6">
+                <span class="step-number">6</span>
+                <span class="step-label">Configure</span>
+            </div>
+        </nav>
+
+        <!-- Step Content -->
+        <main class="content">
+            <!-- Step 1: Hardware Detection -->
+            <section class="step-content active" id="step-1">
+                <h2>Hardware Detection</h2>
+                <p>Detecting your system hardware...</p>
+
+                <div class="card" id="hardware-info">
+                    <div class="loading">Scanning hardware...</div>
+                </div>
+
+                <div class="actions">
+                    <button class="btn btn-next" onclick="nextStep()" disabled id="btn-next-1">
+                        Next: Storage
+                    </button>
+                    <button class="btn btn-primary" id="btn-detect" onclick="detectHardware()">
+                        Redetect Hardware
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 2: Storage Selection -->
+            <section class="step-content" id="step-2">
+                <h2>Storage Selection</h2>
+                <p>Choose where to store your media files.</p>
+
+                <div class="card" id="drive-list">
+                    <div class="loading">Loading drives...</div>
+                </div>
+
+                <div class="card">
+                    <div class="form-group">
+                        <label for="media-path">Media Storage Path</label>
+                        <input type="text" id="media-path" value="/mnt/media" placeholder="/mnt/media">
+                        <small>Directory where movies, TV shows, and music will be stored</small>
+                    </div>
+                </div>
+
+                <div class="form-group hidden" id="format-group">
+                    <label class="format-label">
+                        <input type="checkbox" id="format-drive" disabled>
+                        <span>Format selected drive (erases all data)</span>
+                    </label>
+                    <small id="format-warning" class="format-warning hidden"></small>
+                </div>
+
+                <div class="actions">
+                    <button class="btn btn-next" onclick="nextStep()" disabled id="btn-next-2">
+                        Next: Admin
+                    </button>
+                    <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                </div>
+            </section>
+
+            <!-- Step 3: Admin Account -->
+            <section class="step-content" id="step-3">
+                <h2>Admin Account</h2>
+                <p>Create your global administrator account for all services.</p>
+
+                <div class="card">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="server-name">Jellyfin Server Name</label>
+                            <input type="text" id="server-name" name="server_name" placeholder="Media Server" oninput="updateAdminNextButton()">
+                            <small>Used to identify Jellyfin server (default is server hostname)</small>
+                        </div>
+
+                        <div class="form-group">
+                            <label for="language">Language</label>
+                            <select id="language" class="hardware-select" style="width: 100%">
+                                <option value="en">English</option>
+                                <option value="es">Spanish (Espa&ntilde;ol)</option>
+                                <option value="fr">French (Fran&ccedil;ais)</option>
+                                <option value="de">German (Deutsch)</option>
+                                <option value="it">Italian (Italiano)</option>
+                                <option value="pt">Portuguese (Portugu&ecirc;s)</option>
+                                <option value="nl">Dutch (Nederlands)</option>
+                                <option value="pl">Polish (Polski)</option>
+                                <option value="ru">Russian (&#x0420;&#x0443;&#x0441;&#x0441;&#x043A;&#x0438;&#x0439;)</option>
+                                <option value="ja">Japanese (&#x65E5;&#x672C;&#x8A9E;)</option>
+                                <option value="zh">Chinese (&#x4E2D;&#x6587;)</option>
+                                <option value="ko">Korean (&#xD55C;&#xAD6D;&#xC5B4;)</option>
+                            </select>
+                            <small>UI, subtitles, and metadata preference</small>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="admin-email">Email Address</label>
+                        <input type="email" id="admin-email" name="admin_email" placeholder="admin@example.com">
+                        <small>Used for service notifications and account recovery</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="admin-user">Username</label>
+                        <input type="text" id="admin-user" name="admin_user" placeholder="Something other than 'admin' recommended" oninput="validateUsername(this)">
+                        <small id="username-hint">Letters, numbers, and underscores only (3-32 characters)</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="admin-pass">Password</label>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="admin-pass" name="admin_pass" placeholder="Enter a strong password" oninput="validatePassword()">
+                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility()" aria-label="Toggle password visibility">
+                                <span id="eye-icon">show</span>
+                            </button>
+                        </div>
+                        <small id="password-hint">Minimum 8 characters</small>
+                    </div>
+                </div>
+
+                <div class="actions">
+                    <button class="btn btn-next" onclick="nextStep()" disabled id="btn-next-3">
+                        Next: Services
+                    </button>
+                    <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                </div>
+            </section>
+
+            <!-- Step 4: Service Configuration -->
+            <section class="step-content" id="step-4">
+                <h2>Service Configuration</h2>
+                <p>Configure optional services and integrations.</p>
+
+                <form id="config-form" class="card">
+                    <div class="form-group">
+                        <label for="tmdb-key">TMDB API Key (optional)</label>
+                        <input type="text" id="tmdb-key" name="tmdb_key" placeholder="Get one at themoviedb.org">
+                        <small>Used by Jellyseerr for media discovery</small>
+                    </div>
+
+                    <fieldset>
+                        <legend>Cloudflare Tunnel (Remote Access)</legend>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable-cloudflare" onchange="toggleCloudflare()">
+                                Enable Cloudflare Tunnel for public access
+                            </label>
+                        </div>
+                        <div id="cloudflare-fields" class="hidden">
+                            <div class="form-group">
+                                <label for="domain">Domain Name</label>
+                                <input type="text" id="domain" name="domain" placeholder="example.com">
+                            </div>
+                            <div class="form-group">
+                                <label for="cf-token">Cloudflare Tunnel Token</label>
+                                <input type="password" id="cf-token" name="cf_token">
+                            </div>
+                        </div>
+                    </fieldset>
+                </form>
+
+                <div class="actions">
+                    <button class="btn btn-next" onclick="nextStep()" id="btn-next-4">
+                        Next: Install
+                    </button>
+                    <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                </div>
+            </section>
+
+            <!-- Step 5: Installation Progress -->
+            <section class="step-content" id="step-5">
+                <h2>Install</h2>
+
+                <div class="progress-bar" id="progress-bar">
+                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
+                </div>
+
+                <div class="card">
+                    <div class="install-columns">
+                        <div class="install-steps">
+                            <h3>Installation Steps</h3>
+
+                            <div class="module-list" id="module-list">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+
+                        <div class="install-summary">
+                            <h3>Configuration</h3>
+                            <div id="config-summary">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card hidden" id="log-card">
+                    <h3>Log Output</h3>
+                    <pre class="log-output" id="log-output"></pre>
+                </div>
+
+                <div class="actions">
+                    <button class="btn btn-primary" onclick="beginInstall()" id="btn-install">
+                        Install
+                    </button>
+                    <button class="btn btn-next hidden" onclick="nextStep()" id="btn-next-install">
+                        Next: Complete
+                    </button>
+                    <button class="btn btn-primary hidden" onclick="reinstall()" id="btn-reinstall">
+                        Reinstall
+                    </button>
+                    <button class="btn btn-secondary" onclick="prevStep()" id="btn-back-install">
+                        Back
+                    </button>
+                    <button class="btn btn-secondary hidden" onclick="cancelInstall()" id="btn-cancel">
+                        Cancel
+                    </button>
+                    <button class="btn btn-secondary hidden" onclick="sendDiagnosticReport()" id="btn-diagnostic">
+                        Send Diagnostic Report
+                    </button>
+                </div>
+            </section>
+
+            <!-- Step 6: Configure -->
+            <section class="step-content" id="step-6">
+                <h2>Configure Services</h2>
+                <p>Waiting for containers to come online, then auto-configuring services...</p>
+
+                <div class="progress-bar" id="configure-progress-bar">
+                    <div class="progress-fill" id="configure-progress-fill" style="width: 0%"></div>
+                </div>
+
+                <div class="card">
+                    <div class="configure-columns">
+                        <div class="configure-steps">
+                            <h3>Configuration Steps</h3>
+                            <div class="module-list" id="configure-module-list">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+
+                        <div class="configure-services">
+                            <h3>Services</h3>
+                            <div class="services-list" id="services-list">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card hidden" id="configure-log-card">
+                    <h3>Log Output</h3>
+                    <pre class="log-output" id="configure-log-output"></pre>
+                </div>
+
+                <div class="actions" style="justify-content: flex-end;">
+                    <button class="btn btn-secondary" onclick="prevStep()">Back</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

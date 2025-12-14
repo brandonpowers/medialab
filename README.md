@@ -34,53 +34,60 @@ A complete, privacy-first media server stack running on Ubuntu Server 24.04 LTS.
 Deploy and configure your entire homelab with automated scripts:
 
 ```bash
-# Copy the repository from your local machine
-rsync -avz --no-group --exclude='.env*' --exclude='.git' --exclude='.gitignore' --exclude='data/' ./ [user]@[ip-address]:/opt/homelab
-
-OR
-
-# Clone repository (as root or with sudo)
+# Clone repository
 sudo git clone https://github.com/brandonpowers/homelab.git /opt/homelab
-
 sudo chown -R $(whoami):$(whoami) /opt/homelab
 cd /opt/homelab
 
 # Step 1: Run automated setup
-sudo ./scripts/setup-homelab.sh
+sudo ./scripts/homelab setup
 
 # Step 2: Wait for services to start (2-3 minutes)
-docker compose ps
+./scripts/homelab status
 
 # Step 3: Run automated configuration
-./scripts/configure-services.sh
+./scripts/homelab configure
 ```
 
-**Step 1 - Initial Setup (`setup-homelab.sh`):**
-- Installs Docker and Docker Compose
-- Checks all prerequisites
-- Prompts for configuration (timezone, domain, email, API keys)
-- Generates all passwords and security tokens automatically
-- Creates `.env` configuration file
-- Sets up all media directories with correct permissions
-- Configures ARM udev rules for automatic disc ripping
-- Validates docker-compose.yml syntax
-- Pulls all Docker images
-- Starts all services
-- Shows service status and access URLs
+Or run everything at once:
 
-**Step 2 - Service Configuration (`configure-services.sh`):**
-- Extracts API keys from service configs
-- Links download clients to all *arr apps
-- Connects Prowlarr to Sonarr/Radarr/Lidarr
-- Configures FlareSolverr for Cloudflare bypass
-- Links Bazarr for subtitle management
-- Syncs TRaSH Guides quality profiles via Recyclarr
-- Configures Tdarr transcoding libraries
-- Configures ARM for fault-tolerant ripping
-- Updates `.env` with API keys
-- 90% of manual configuration automated!
+```bash
+sudo ./scripts/homelab all
+```
+
+**Setup Phase** - Prepares infrastructure:
+- Installs Docker and Docker Compose
+- Detects GPU and optical drives
+- Configures storage and media directories
+- Generates `.env` with secure passwords
+- Sets up ARM udev rules for disc detection
+- Pulls Docker images and starts services
+
+**Configure Phase** - Connects services via API:
+- Extracts and links API keys
+- Connects download clients to *arr apps
+- Links Prowlarr to Sonarr/Radarr/Lidarr
+- Configures Bazarr for subtitles
+- Syncs TRaSH Guides via Recyclarr
+- Sets up Tdarr transcoding libraries
+- Configures ARM for disc ripping
+- Adds all services to Homarr dashboard
 
 **Total time:** ~20-30 minutes (mostly downloading Docker images)
+
+### Web UI Wizard
+
+For a guided setup experience, use the web-based wizard:
+
+```bash
+./scripts/serve-ui.sh
+```
+
+Then open http://localhost:8000 in your browser. The wizard walks you through:
+1. Hardware detection (GPU, optical drives)
+2. Storage selection
+3. Configuration options
+4. Automated installation with real-time progress
 
 For detailed information about automated configuration, see **[Automated Configuration Guide](docs/automated-configuration.md)**
 

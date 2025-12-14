@@ -1,0 +1,38 @@
+# docker-compose.web.yml
+# Web UI for homelab setup wizard
+#
+# Usage:
+#   docker compose -f docker-compose.web.yml up -d
+#   Open http://localhost:8000
+#
+
+services:
+  homelab-ui:
+    image: python:3.11-slim
+    container_name: homelab-ui
+    working_dir: /app
+    command: >
+      sh -c "
+        mkdir -p /app/cgi-bin &&
+        ln -sf /app/scripts/cgi/*.cgi /app/cgi-bin/ 2>/dev/null || true &&
+        cd /app &&
+        python -m http.server 8000 --cgi
+      "
+    ports:
+      - "127.0.0.1:8000:8000"  # Local only for security
+    volumes:
+      - ./web:/app:ro
+      - ./scripts:/app/scripts:ro
+      - ./.env:/app/.env:rw
+      - ./data:/app/data:rw
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - HOMELAB_ROOT=/app
+    restart: unless-stopped
+    labels:
+      - "com.homelab.description=Setup Wizard Web UI"
+
+# Note: For production use, consider:
+# 1. Adding authentication
+# 2. Using a reverse proxy with HTTPS
+# 3. Restricting Docker socket access
