@@ -164,31 +164,21 @@ configure_arr_auth() {
     local password="$4"
     local api_version="${5:-v3}"
 
-    # Get current host config
+    # Get current host config - MUST preserve all fields for API to accept auth changes
     local current_config
     current_config=$(api_get "${url}/api/${api_version}/config/host" "$api_key" 2>/dev/null || echo "{}")
 
-    # Extract current ID (needed for PUT)
-    local config_id
-    config_id=$(echo "$current_config" | grep -oP '"id":\s*\K\d+' | head -1 || echo "1")
+    if [[ -z "$current_config" || "$current_config" == "{}" ]]; then
+        report_log "warning" "Could not get current config"
+        return 1
+    fi
 
-    # Build auth config payload
+    # Update config with auth settings using jq (preserves all existing fields)
     local auth_body
-    auth_body=$(cat <<EOF
-{
-    "id": ${config_id},
-    "bindAddress": "*",
-    "port": $(echo "$current_config" | grep -oP '"port":\s*\K\d+' | head -1 || echo "8989"),
-    "urlBase": "",
-    "instanceName": "$(echo "$current_config" | grep -oP '"instanceName":\s*"\K[^"]+' | head -1 || echo "")",
-    "authenticationMethod": "forms",
-    "authenticationRequired": "enabled",
-    "username": "${username}",
-    "password": "${password}",
-    "certificateValidation": "enabled"
-}
-EOF
-)
+    auth_body=$(echo "$current_config" | jq \
+        --arg user "$username" \
+        --arg pass "$password" \
+        '. + {authenticationMethod: "forms", authenticationRequired: "enabled", username: $user, password: $pass, passwordConfirmation: $pass}')
 
     if api_put "${url}/api/${api_version}/config/host" "$auth_body" "$api_key" > /dev/null 2>&1; then
         report_log "success" "Authentication configured"

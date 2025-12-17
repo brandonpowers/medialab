@@ -23,7 +23,15 @@ get_env_value() {
     local env_file="${2:-$(get_project_root)/.env}"
 
     if [[ -f "$env_file" ]]; then
-        grep "^${key}=" "$env_file" 2>/dev/null | cut -d'=' -f2- | head -1 || true
+        local value
+        value=$(grep "^${key}=" "$env_file" 2>/dev/null | cut -d'=' -f2- | head -1 || true)
+        # Strip surrounding quotes if present
+        if [[ "$value" =~ ^\'.*\'$ ]]; then
+            value="${value:1:-1}"
+        elif [[ "$value" =~ ^\".*\"$ ]]; then
+            value="${value:1:-1}"
+        fi
+        echo "$value"
     fi
 }
 
@@ -46,20 +54,30 @@ set_env_value() {
 EOF
     fi
 
+    # Quote values containing shell special characters
+    # This prevents issues when .env is sourced
+    local quoted_value="$value"
+    if [[ "$value" =~ [[:space:]\(\)\$\"\'\`\\!\#\&\*\;\<\>\|\~] ]]; then
+        # Escape single quotes in value, then wrap in single quotes
+        quoted_value="'${value//\'/\'\\\'\'}'"
+    fi
+
     # Check if key LINE exists (not just if it has a value)
     # This fixes duplicate entries when key exists with empty value
     if grep -q "^${key}=" "$env_file" 2>/dev/null; then
         # Key exists in file
         if [[ "$force" == "true" ]]; then
-            # Force update - replace existing value
-            sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+            # Force update - replace existing value (use different delimiter for sed)
+            # Delete and re-add to handle complex quoting
+            sed -i "/^${key}=/d" "$env_file"
+            echo "${key}=${quoted_value}" >> "$env_file"
         fi
         # Key exists and not forcing, skip (not an error)
         return 0
     fi
 
     # Key doesn't exist, append it
-    echo "${key}=${value}" >> "$env_file"
+    echo "${key}=${quoted_value}" >> "$env_file"
     return 0
 }
 

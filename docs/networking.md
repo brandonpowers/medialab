@@ -259,8 +259,7 @@ docker compose restart cloudflared
   |  |    Jellyfin, Jellyseerr, Homarr      |  |
   |  |                                      |  |
   |  |  PRIVATE (LAN only):                 |  |
-  |  |    *arr apps, Downloads, Tdarr       |  |
-  |  |    ARM, Uptime Kuma                  |  |
+  |  |    *arr apps, Downloads, Tdarr, ARM  |  |
   |  +--------------------------------------+  |
   +--------------------------------------------+
 ```

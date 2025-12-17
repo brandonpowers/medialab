@@ -32,15 +32,17 @@ main() {
     local settings_file="${project_root}/data/jellyseerr/config/settings.json"
 
     if [[ ! -f "$settings_file" ]]; then
-        report_log "warning" "Jellyseerr settings not found"
-        print_info "Configure Jellyseerr manually at http://localhost:5055"
+        report_log "info" "Jellyseerr settings not found - needs initial setup"
+        report_log "info" "Complete setup wizard at http://localhost:5055"
         report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
+        finish_progress "complete" "$MODULE_NAME"
         return 0
     fi
 
     if ! command -v jq &> /dev/null; then
         report_log "warning" "jq not installed - skipping Jellyseerr configuration"
         report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
+        finish_progress "complete" "$MODULE_NAME"
         return 0
     fi
 
@@ -49,11 +51,14 @@ main() {
     api_key=$(jq -r '.main.apiKey' "$settings_file" 2>/dev/null || true)
 
     if [[ -z "$api_key" ]] || [[ "$api_key" == "null" ]]; then
-        report_log "warning" "Jellyseerr API key not found - complete the setup wizard first"
-        print_info "Visit http://localhost:5055 to complete Jellyseerr setup"
+        report_log "info" "Jellyseerr not initialized - complete setup wizard first"
+        report_log "info" "Visit http://localhost:5055 to configure Jellyseerr"
         report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
+        finish_progress "complete" "$MODULE_NAME"
         return 0
     fi
+
+    report_log "success" "Jellyseerr API key found"
 
     local radarr_key="${RADARR_API_KEY:-$(get_api_key radarr)}"
     local sonarr_key="${SONARR_API_KEY:-$(get_api_key sonarr)}"

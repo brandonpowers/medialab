@@ -73,6 +73,66 @@ main() {
     wait_for_service "Jellyfin" "http://localhost:8096/health" 15 2 || print_info "Jellyfin will need manual configuration"
     wait_for_service "Jellyseerr" "http://localhost:5055" 15 2 || print_info "Jellyseerr will need manual configuration"
 
+    # Sync all API keys from container configs to .env
+    # This ensures .env has the actual keys containers are using
+    # before any dependent configure scripts run
+    print_section "Syncing API Keys"
+    local project_root
+    project_root=$(get_project_root)
+
+    # Sync *arr app keys (XML config format)
+    for service in sonarr radarr lidarr prowlarr; do
+        local config_file="$project_root/data/${service}/config/config.xml"
+        if [[ -f "$config_file" ]]; then
+            local key
+            key=$(grep -oP '<ApiKey>\K[^<]+' "$config_file" 2>/dev/null || true)
+            if [[ -n "$key" ]]; then
+                local env_var="${service^^}_API_KEY"
+                local current_key
+                current_key=$(get_env_value "$env_var" "$project_root/.env")
+                if [[ "$key" != "$current_key" ]]; then
+                    set_env_value "$env_var" "$key" "true" "$project_root/.env"
+                    export "${env_var}=${key}"
+                    report_log "info" "Synced ${service^} API key"
+                fi
+            fi
+        fi
+    done
+
+    # Sync SABnzbd key (INI config format)
+    local sab_config="$project_root/data/sabnzbd/config/sabnzbd.ini"
+    if [[ -f "$sab_config" ]]; then
+        local sab_key
+        sab_key=$(grep -oP '^api_key\s*=\s*\K\S+' "$sab_config" 2>/dev/null || true)
+        if [[ -n "$sab_key" ]]; then
+            local current_key
+            current_key=$(get_env_value "SABNZBD_API_KEY" "$project_root/.env")
+            if [[ "$sab_key" != "$current_key" ]]; then
+                set_env_value "SABNZBD_API_KEY" "$sab_key" "true" "$project_root/.env"
+                export SABNZBD_API_KEY="$sab_key"
+                report_log "info" "Synced SABnzbd API key"
+            fi
+        fi
+    fi
+
+    # Sync Bazarr key (YAML config format)
+    local bazarr_config="$project_root/data/bazarr/config/config/config.yaml"
+    if [[ -f "$bazarr_config" ]]; then
+        local bazarr_key
+        bazarr_key=$(grep -oP '^\s*apikey:\s*\K\S+' "$bazarr_config" 2>/dev/null | head -1 || true)
+        if [[ -n "$bazarr_key" ]]; then
+            local current_key
+            current_key=$(get_env_value "BAZARR_API_KEY" "$project_root/.env")
+            if [[ "$bazarr_key" != "$current_key" ]]; then
+                set_env_value "BAZARR_API_KEY" "$bazarr_key" "true" "$project_root/.env"
+                export BAZARR_API_KEY="$bazarr_key"
+                report_log "info" "Synced Bazarr API key"
+            fi
+        fi
+    fi
+
+    report_log "success" "API keys synchronized from container configs"
+
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
     finish_progress "complete" "$MODULE_NAME"
 }

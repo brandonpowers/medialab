@@ -17,12 +17,12 @@
 
 set -euo pipefail
 
-# Script directory
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# Script directory (use unique name to avoid collision with sourced scripts)
+HOMELAB_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$HOMELAB_SCRIPT_DIR/.." && pwd)"
 
 # Source library
-source "$SCRIPT_DIR/lib/init.sh"
+source "$HOMELAB_SCRIPT_DIR/lib/init.sh"
 
 # ============================================
 # VERSION AND HELP
@@ -38,6 +38,7 @@ USAGE:
     homelab <command> [options]
 
 COMMANDS:
+    start           Launch the web UI setup wizard
     setup           Run initial setup (Docker, storage, environment)
     configure       Configure services via API (includes Homarr dashboard)
     all             Run setup and configure phases
@@ -50,9 +51,9 @@ OPTIONS:
     -v, --version   Show version
 
 EXAMPLES:
-    sudo ./scripts/homelab setup
-    ./scripts/homelab configure
-    ./scripts/homelab all
+    ./homelab start
+    ./homelab setup
+    ./homelab configure
 
 For more information, see: docs/README.md
 EOF
@@ -65,6 +66,10 @@ show_version() {
 # ============================================
 # PHASE RUNNERS
 # ============================================
+
+run_start() {
+    exec "$HOMELAB_SCRIPT_DIR/serve-ui.sh"
+}
 
 run_setup() {
     local json_flag=""
@@ -90,8 +95,8 @@ run_setup() {
     local current=0
 
     for module in "${modules[@]}"; do
-        ((current++))
-        local module_path="$SCRIPT_DIR/modules/setup/$module"
+        ((++current))
+        local module_path="$HOMELAB_SCRIPT_DIR/modules/setup/$module"
 
         if [[ ! -f "$module_path" ]]; then
             report_log "warning" "Module not found: $module"
@@ -104,10 +109,13 @@ run_setup() {
             report_progress "$current" "$total" "${module%.sh} complete" "complete"
         else
             report_progress "$current" "$total" "${module%.sh} failed" "error"
-            if [[ "$OUTPUT_MODE" != "json" ]]; then
+            if [[ "$OUTPUT_MODE" != "json" && -t 0 ]]; then
                 echo ""
                 read -r -p "Continue anyway? (y/N): " response
                 [[ ! "$response" =~ ^[Yy]$ ]] && exit 1
+            else
+                # Non-interactive mode - exit on failure
+                exit 1
             fi
         fi
     done
@@ -128,13 +136,13 @@ run_configure() {
     cd "$PROJECT_ROOT"
 
     # Check if services are running
-    if ! docker compose ps --status running | grep -q "running" 2>/dev/null; then
+    if ! docker compose ps 2>/dev/null | grep -q "Up" ; then
         print_error "Services are not running. Run setup first:"
         print_info "  sudo ./scripts/homelab setup"
         exit 1
     fi
 
-    local module_dir="$SCRIPT_DIR/modules/configure"
+    local module_dir="$HOMELAB_SCRIPT_DIR/modules/configure"
 
     if [[ -d "$module_dir" ]] && ls "$module_dir"/*.sh &>/dev/null; then
         # Run modular configure scripts
@@ -145,17 +153,17 @@ run_configure() {
         local failed=0
 
         for module in "${modules[@]}"; do
-            ((current++))
+            ((++current))
             local module_name=$(basename "$module" .sh)
 
             report_progress "$current" "$total" "Running ${module_name}..." "running"
 
             if bash "$module" $json_flag; then
                 report_progress "$current" "$total" "${module_name} complete" "complete"
-                ((succeeded++))
+                ((++succeeded))
             else
                 report_progress "$current" "$total" "${module_name} failed" "warning"
-                ((failed++))
+                ((++failed))
                 # Continue with other modules even if one fails
             fi
         done
@@ -167,8 +175,8 @@ run_configure() {
     else
         # Fall back to original configure-services.sh
         print_info "Running configure-services.sh..."
-        if [[ -f "$SCRIPT_DIR/configure-services.sh" ]]; then
-            bash "$SCRIPT_DIR/configure-services.sh"
+        if [[ -f "$HOMELAB_SCRIPT_DIR/configure-services.sh" ]]; then
+            bash "$HOMELAB_SCRIPT_DIR/configure-services.sh"
         else
             print_error "No configure modules found"
             exit 1
@@ -252,6 +260,9 @@ main() {
 
     # Execute command
     case "$command" in
+        start)
+            run_start
+            ;;
         setup)
             run_setup "$@"
             ;;

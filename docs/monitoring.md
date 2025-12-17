@@ -1,136 +1,13 @@
-# Monitoring & Management Services
+# Media Processing Services
 
-Services for monitoring, managing, and optimizing your homelab.
+Services for automated media processing and optimization.
 
 ## Services Overview
 
 | Service | Purpose | Access | Port |
 |---------|---------|--------|------|
-| **Uptime Kuma** | Service monitoring and uptime tracking | Private (LAN) | 3001 |
 | **Tdarr** | Automated video transcoding | Private (LAN) | 8265 |
 | **ARM** | Automatic Blu-ray/DVD ripping | Private (LAN) | 8090 |
-
----
-
-## Uptime Kuma - Service Monitoring
-
-Monitor all your services and get alerts when they go down.
-
-### Features
-
-- HTTP(s) monitoring
-- TCP/UDP port monitoring
-- Ping monitoring
-- DNS monitoring
-- Docker container monitoring
-- SSL certificate expiry monitoring
-- Notifications (Discord, Telegram, Email, Slack, etc.)
-- Public status pages
-- Uptime statistics
-- Response time graphs
-
-### Initial Setup
-
-1. **Access:** http://SERVER_IP:3001
-
-2. **First Time Setup:**
-   - Create admin account
-   - Set username and password
-   - Complete setup
-
-3. **Add Monitors:**
-
-   Click **Add New Monitor**
-
-   **For Each Service:**
-   - **Monitor Type**: HTTP(s)
-   - **Friendly Name**: Service name (e.g., "Jellyfin")
-   - **URL**: Internal Docker URL (e.g., `http://jellyfin:8096`)
-   - **Heartbeat Interval**: 60 seconds
-   - **Retries**: 3
-   - **Max Redirects**: 10
-   - Click **Save**
-
-### Recommended Monitors
-
-**Public Services:**
-```
-Jellyfin    -> http://jellyfin:8096
-Jellyseerr  -> http://jellyseerr:5055
-Homarr      -> http://homarr:7575
-```
-
-**Admin Services:**
-```
-Sonarr      -> http://sonarr:8989
-Radarr      -> http://radarr:7878
-Lidarr      -> http://lidarr:8686
-Prowlarr    -> http://prowlarr:9696
-Bazarr      -> http://bazarr:6767
-qBittorrent -> http://qbittorrent:8080
-SABnzbd     -> http://sabnzbd:8080
-ARM         -> http://arm:8080
-Tdarr       -> http://tdarr:8265
-```
-
-### Notifications
-
-**Set Up Notifications:**
-
-1. Settings -> Notifications
-2. Click **Add New Notification**
-3. Select notification type
-
-**Popular Options:**
-
-**Discord:**
-- Create webhook in Discord server settings
-- Paste webhook URL
-- Test notification
-
-**Email:**
-- SMTP hostname (e.g., smtp.gmail.com)
-- Port: 587 (STARTTLS)
-- Username and password
-- From and to addresses
-
-**Telegram:**
-- Create bot with @BotFather
-- Get bot token and chat ID
-- Configure in Uptime Kuma
-
-4. **Enable Notifications Per Monitor:**
-   - Edit monitor
-   - Select notification methods
-   - Configure when to notify (down, up, certificate expiry)
-
-### Status Pages
-
-**Create Public Status Page:**
-
-1. Status Pages -> **Add Status Page**
-2. **Title**: Your Homelab Status
-3. **Slug**: Custom URL path
-4. Select monitors to include
-5. Customize:
-   - Theme (light/dark)
-   - Show/hide monitor tags
-   - Custom CSS
-6. **Save**
-
-**Share Status Page:**
-- Public URL: `http://SERVER_IP:3001/status/your-slug`
-- Share with family/friends
-- No login required
-- Shows real-time status
-
-### Maintenance Windows
-
-**Schedule Maintenance:**
-1. Maintenance -> **Add Maintenance**
-2. Set start and end time
-3. Select affected monitors
-4. Notifications paused during maintenance
 
 ---
 
@@ -356,41 +233,9 @@ The pipeline is automatic:
 2. Tdarr watches the folder and transcodes to H.265
 3. Jellyfin scans and adds to library
 
-### Uptime Kuma + Notifications
-
-**Discord Bot:**
-- Get notifications in Discord channel
-- See when services go down/up
-- Monitor from anywhere
-
-**Status Page:**
-- Share with family
-- See service status at a glance
-- No login required
-
 ---
 
 ## Troubleshooting
-
-### Uptime Kuma
-
-**Monitor shows false positives:**
-```bash
-# Check service is actually accessible
-curl http://jellyfin:8096
-
-# Increase timeout in monitor settings
-# Increase retries to 5
-
-# Check Uptime Kuma logs
-docker compose logs uptime-kuma
-```
-
-**Notifications not working:**
-- Test notification in settings
-- Check webhook URLs are correct
-- Verify bot tokens/credentials
-- Check firewall rules
 
 ### Tdarr
 
@@ -422,12 +267,6 @@ docker exec tdarr ls -la /dev/dri/
 
 ## Performance Optimization
 
-### Uptime Kuma
-
-- **Moderate check intervals**: 60 seconds is fine
-- **Disable unnecessary monitors**: Only monitor critical services
-- **Database maintenance**: Prune old data regularly
-
 ### Tdarr
 
 - **One transcode at a time**: Prevents overload
@@ -442,7 +281,6 @@ docker exec tdarr ls -la /dev/dri/
 
 | Service | URL |
 |---------|-----|
-| Uptime Kuma | http://SERVER_IP:3001 |
 | Tdarr | http://SERVER_IP:8265 |
 | ARM | http://SERVER_IP:8090 |
 

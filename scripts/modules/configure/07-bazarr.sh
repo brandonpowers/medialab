@@ -40,25 +40,32 @@ main() {
 
     report_log "success" "Bazarr API key: $api_key"
 
-    # Configure authentication
+    # Configure Forms authentication via config file (API is unreliable)
     local admin_user="${ADMIN_USERNAME:-admin}"
     local admin_pass="${ADMIN_PASSWORD:-}"
-    if [[ -n "$admin_pass" ]]; then
-        print_info "Configuring Bazarr authentication..."
-        local auth_body
-        auth_body=$(cat <<EOF
-{
-    "type": "form",
-    "username": "${admin_user}",
-    "password": "${admin_pass}"
-}
-EOF
-)
-        curl -s -X PATCH "http://localhost:6767/api/system/settings/auth" \
-            -H "X-Api-Key: $api_key" \
-            -H "Content-Type: application/json" \
-            -d "$auth_body" > /dev/null 2>&1 && \
-            report_log "success" "Authentication configured" || report_log "warning" "Could not configure authentication"
+    local config_file
+    config_file="$(get_project_root)/data/bazarr/config/config/config.yaml"
+
+    if [[ -n "$admin_pass" ]] && [[ -f "$config_file" ]]; then
+        print_info "Configuring Forms authentication..."
+
+        # Stop Bazarr to safely edit config
+        docker stop bazarr > /dev/null 2>&1 || true
+
+        # Bazarr requires MD5 hash of the password
+        local pass_hash
+        pass_hash=$(echo -n "$admin_pass" | md5sum | cut -d' ' -f1)
+
+        # Update auth section in config file
+        sed -i "s/^  type: .*/  type: form/" "$config_file"
+        sed -i "s/^  username: .*/  username: $admin_user/" "$config_file"
+        sed -i "s/^  password: .*/  password: $pass_hash/" "$config_file"
+
+        # Restart Bazarr
+        docker start bazarr > /dev/null 2>&1 || true
+        sleep 3
+
+        report_log "success" "Forms authentication configured for user: $admin_user"
     fi
 
     # Link Sonarr to Bazarr
@@ -67,27 +74,26 @@ EOF
         local sonarr_body
         sonarr_body=$(cat <<EOF
 {
-    "ip": "sonarr",
-    "port": 8989,
-    "base_url": "/",
-    "ssl": false,
-    "apikey": "${SONARR_API_KEY}",
-    "full_update": "Daily",
-    "only_monitored": false
+    "sonarr": {
+        "ip": "sonarr",
+        "port": 8989,
+        "base_url": "/",
+        "ssl": false,
+        "apikey": "${SONARR_API_KEY}",
+        "full_update": "Daily",
+        "only_monitored": false
+    },
+    "general": {
+        "use_sonarr": true
+    }
 }
 EOF
 )
-        curl -s -X PATCH "http://localhost:6767/api/system/settings/sonarr" \
-            -H "X-Api-Key: $api_key" \
+        curl -s -X POST "http://localhost:6767/api/system/settings" \
+            -H "x-api-key: $api_key" \
             -H "Content-Type: application/json" \
             -d "$sonarr_body" > /dev/null 2>&1 && \
             report_log "success" "Sonarr linked" || report_log "warning" "Manual Sonarr configuration may be needed"
-
-        # Enable Sonarr in general settings
-        curl -s -X PATCH "http://localhost:6767/api/system/settings/general" \
-            -H "X-Api-Key: $api_key" \
-            -H "Content-Type: application/json" \
-            -d '{"use_sonarr": true}' > /dev/null 2>&1 || true
     fi
 
     # Link Radarr to Bazarr
@@ -96,27 +102,26 @@ EOF
         local radarr_body
         radarr_body=$(cat <<EOF
 {
-    "ip": "radarr",
-    "port": 7878,
-    "base_url": "/",
-    "ssl": false,
-    "apikey": "${RADARR_API_KEY}",
-    "full_update": "Daily",
-    "only_monitored": false
+    "radarr": {
+        "ip": "radarr",
+        "port": 7878,
+        "base_url": "/",
+        "ssl": false,
+        "apikey": "${RADARR_API_KEY}",
+        "full_update": "Daily",
+        "only_monitored": false
+    },
+    "general": {
+        "use_radarr": true
+    }
 }
 EOF
 )
-        curl -s -X PATCH "http://localhost:6767/api/system/settings/radarr" \
-            -H "X-Api-Key: $api_key" \
+        curl -s -X POST "http://localhost:6767/api/system/settings" \
+            -H "x-api-key: $api_key" \
             -H "Content-Type: application/json" \
             -d "$radarr_body" > /dev/null 2>&1 && \
             report_log "success" "Radarr linked" || report_log "warning" "Manual Radarr configuration may be needed"
-
-        # Enable Radarr in general settings
-        curl -s -X PATCH "http://localhost:6767/api/system/settings/general" \
-            -H "X-Api-Key: $api_key" \
-            -H "Content-Type: application/json" \
-            -d '{"use_radarr": true}' > /dev/null 2>&1 || true
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

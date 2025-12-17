@@ -124,6 +124,90 @@ EOF
     api_post "http://localhost:9696/api/v1/downloadclient" "$qbit_body" "$api_key" > /dev/null 2>&1 && \
         report_log "success" "qBittorrent added to Prowlarr" || report_log "info" "qBittorrent may already exist"
 
+    # Add SABnzbd download client if configured
+    if [[ -n "${SABNZBD_API_KEY:-}" ]]; then
+        print_info "Adding SABnzbd to Prowlarr..."
+        local sab_body
+        sab_body=$(cat <<EOF
+{
+    "enable": true,
+    "protocol": "usenet",
+    "priority": 1,
+    "name": "SABnzbd",
+    "fields": [
+        {"name": "host", "value": "sabnzbd"},
+        {"name": "port", "value": 8080},
+        {"name": "apiKey", "value": "${SABNZBD_API_KEY}"},
+        {"name": "category", "value": "prowlarr"},
+        {"name": "recentTvPriority", "value": 0},
+        {"name": "olderTvPriority", "value": 0},
+        {"name": "recentMoviePriority", "value": 0},
+        {"name": "olderMoviePriority", "value": 0}
+    ],
+    "implementationName": "SABnzbd",
+    "implementation": "Sabnzbd",
+    "configContract": "SabnzbdSettings",
+    "tags": []
+}
+EOF
+)
+        api_post "http://localhost:9696/api/v1/downloadclient" "$sab_body" "$api_key" > /dev/null 2>&1 && \
+            report_log "success" "SABnzbd added to Prowlarr" || report_log "info" "SABnzbd may already exist"
+    fi
+
+    # Add NZB indexer if configured
+    if [[ -n "${NZB_INDEXER_API_KEY:-}" && -n "${NZB_INDEXER_URL:-}" ]]; then
+        print_info "Adding NZB indexer: ${NZB_INDEXER_TYPE:-nzbgeek}..."
+
+        local nzb_name nzb_implementation nzb_config_contract
+        case "${NZB_INDEXER_TYPE:-nzbgeek}" in
+            nzbgeek)
+                nzb_name="NZBgeek"
+                nzb_implementation="Newznab"
+                nzb_config_contract="NewznabSettings"
+                ;;
+            drunkenslug)
+                nzb_name="DrunkenSlug"
+                nzb_implementation="Newznab"
+                nzb_config_contract="NewznabSettings"
+                ;;
+            nzbfinder)
+                nzb_name="NZBFinder"
+                nzb_implementation="Newznab"
+                nzb_config_contract="NewznabSettings"
+                ;;
+            *)
+                nzb_name="${NZB_INDEXER_TYPE}"
+                nzb_implementation="Newznab"
+                nzb_config_contract="NewznabSettings"
+                ;;
+        esac
+
+        local nzb_body
+        nzb_body=$(cat <<EOF
+{
+    "enable": true,
+    "protocol": "usenet",
+    "priority": 25,
+    "name": "${nzb_name}",
+    "fields": [
+        {"name": "baseUrl", "value": "${NZB_INDEXER_URL}"},
+        {"name": "apiPath", "value": "/api"},
+        {"name": "apiKey", "value": "${NZB_INDEXER_API_KEY}"},
+        {"name": "categories", "value": [2000, 2010, 2020, 2030, 2040, 2045, 2050, 2060, 5000, 5010, 5020, 5030, 5040, 5050, 3000, 3010, 3020, 3030, 3040]},
+        {"name": "vipExpiration", "value": ""}
+    ],
+    "implementationName": "${nzb_implementation}",
+    "implementation": "${nzb_implementation}",
+    "configContract": "${nzb_config_contract}",
+    "tags": []
+}
+EOF
+)
+        api_post "http://localhost:9696/api/v1/indexer" "$nzb_body" "$api_key" > /dev/null 2>&1 && \
+            report_log "success" "${nzb_name} indexer added to Prowlarr" || report_log "info" "${nzb_name} may already exist"
+    fi
+
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
     finish_progress "complete" "$MODULE_NAME"
 }

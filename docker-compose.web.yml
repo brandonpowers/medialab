@@ -1,5 +1,5 @@
 # docker-compose.web.yml
-# Web UI for homelab setup wizard
+# Web UI for Homelab Setup
 #
 # Usage:
 #   docker compose -f docker-compose.web.yml up -d

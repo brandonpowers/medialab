@@ -148,12 +148,13 @@ main() {
     if [[ -n "$HOMARR_API_KEY" ]] && [[ "$HOMARR_API_KEY" != "your_homarr_api_key_here" ]]; then
         report_log "success" "Found existing API key in .env"
     else
-        if [[ "$OUTPUT_MODE" == "json" ]]; then
+        # Non-interactive or JSON mode - skip and let user configure manually
+        if [[ "$OUTPUT_MODE" == "json" ]] || [[ ! -t 0 ]]; then
             report_log "info" "No Homarr API key - skipping auto-configuration"
             report_log "info" "Setup Homarr manually at http://localhost:7575"
             report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
             finish_progress "complete" "$MODULE_NAME"
-            exit 0
+            return 0
         fi
 
         echo ""
@@ -238,11 +239,6 @@ main() {
     echo -e "${YELLOW:-}Adding media processing services...${NC:-}"
     create_app "Tdarr" "http://${server_ip}:8265" "${icon_base}/tdarr.png" "Automated transcoding" "http://${server_ip}:8265" && ((added++)) || ((failed++))
     create_app "ARM" "http://${server_ip}:8090" "${icon_base}/arm.png" "Automatic Ripping Machine" "http://${server_ip}:8090" && ((added++)) || ((failed++))
-
-    # Monitoring
-    echo ""
-    echo -e "${YELLOW:-}Adding monitoring services...${NC:-}"
-    create_app "Uptime Kuma" "http://${server_ip}:3001" "${icon_base}/uptime-kuma.png" "Service monitoring" "http://${server_ip}:3001" && ((added++)) || ((failed++))
 
     # Summary
     print_section "Configuration Complete!"

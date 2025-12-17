@@ -12,9 +12,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+URL="http://localhost:8000"
+
 echo "Starting Homelab Setup Wizard..."
 echo ""
-echo "Open your browser to: http://localhost:8000"
+echo "Opening browser to: $URL"
 echo "Press Ctrl+C to stop"
 echo ""
 
@@ -27,6 +29,9 @@ for cgi in "$SCRIPT_DIR/cgi"/*.cgi; do
         ln -sf "$cgi" cgi-bin/ 2>/dev/null || true
     fi
 done
+
+# Open browser after a short delay (give server time to start)
+(sleep 1 && xdg-open "$URL" 2>/dev/null || open "$URL" 2>/dev/null || true) &
 
 # Start Python HTTP server with CGI support
 python3 -m http.server 8000 --cgi 2>/dev/null || \

@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Homelab Setup Wizard</title>
+    <title>Homelab Setup</title>
     <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>Homelab Setup Wizard</h1>
+            <h1>Homelab Setup</h1>
         </header>
 
         <!-- Progress Steps -->
@@ -109,7 +109,7 @@
 
                         <div class="form-group">
                             <label for="language">Language</label>
-                            <select id="language" class="hardware-select" style="width: 100%">
+                            <select id="language">
                                 <option value="en">English</option>
                                 <option value="es">Spanish (Espa&ntilde;ol)</option>
                                 <option value="fr">French (Fran&ccedil;ais)</option>
@@ -167,9 +167,97 @@
                 <form id="config-form" class="card">
                     <div class="form-group">
                         <label for="tmdb-key">TMDB API Key (optional)</label>
-                        <input type="text" id="tmdb-key" name="tmdb_key" placeholder="Get one at themoviedb.org">
+                        <div class="password-input-wrapper">
+                            <input type="password" id="tmdb-key" name="tmdb_key" placeholder="Get one at themoviedb.org">
+                            <button type="button" class="password-toggle" onclick="togglePasswordVisibility('tmdb-key', 'tmdb-toggle')" aria-label="Toggle visibility">
+                                <span id="tmdb-toggle">show</span>
+                            </button>
+                        </div>
                         <small>Used by Jellyseerr for media discovery</small>
                     </div>
+
+                    <fieldset>
+                        <legend>Usenet Provider (optional)</legend>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable-usenet" onchange="toggleUsenet()">
+                                Enable Usenet downloads (requires provider subscription)
+                            </label>
+                        </div>
+                        <div id="usenet-fields" class="hidden">
+                            <div class="form-row">
+                                <div class="form-group" style="flex: 1;">
+                                    <label for="usenet-host">Server Host</label>
+                                    <input type="text" id="usenet-host" name="usenet_host" value="news.newshosting.com">
+                                </div>
+                                <div class="form-group" style="flex: 0 0 90px;">
+                                    <label for="usenet-port">Port</label>
+                                    <input type="number" id="usenet-port" name="usenet_port" value="563">
+                                </div>
+                                <div class="form-group" style="flex: 0 0 120px;">
+                                    <label for="usenet-connections">Connections</label>
+                                    <input type="number" id="usenet-connections" name="usenet_connections" value="30" min="1" max="60">
+                                </div>
+                                <div class="form-group" style="flex: 0 0 auto; display: flex; align-items: flex-end; padding-bottom: 0.5rem;">
+                                    <label style="display: flex; align-items: center; gap: 0.5rem; white-space: nowrap;">
+                                        <input type="checkbox" id="usenet-ssl" name="usenet_ssl" checked>
+                                        SSL
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="usenet-user">Username</label>
+                                    <input type="text" id="usenet-user" name="usenet_user" placeholder="Your Usenet username">
+                                </div>
+                                <div class="form-group">
+                                    <label for="usenet-pass">Password</label>
+                                    <div class="password-input-wrapper">
+                                        <input type="password" id="usenet-pass" name="usenet_pass" placeholder="Your Usenet password">
+                                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('usenet-pass', 'usenet-pass-toggle')" aria-label="Toggle visibility">
+                                            <span id="usenet-pass-toggle">show</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </fieldset>
+
+                    <fieldset>
+                        <legend>Usenet Indexer (optional)</legend>
+                        <div class="form-group">
+                            <label>
+                                <input type="checkbox" id="enable-nzb-indexer" onchange="toggleNzbIndexer()">
+                                Enable Usenet indexer (requires NZBgeek, DrunkenSlug, etc.)
+                            </label>
+                        </div>
+                        <div id="nzb-indexer-fields" class="hidden">
+                            <div class="form-row">
+                                <div class="form-group" style="flex: 0 0 200px;">
+                                    <label for="nzb-indexer-type">Indexer</label>
+                                    <select id="nzb-indexer-type" name="nzb_indexer_type" onchange="updateNzbIndexerUrl()">
+                                        <option value="nzbgeek">NZBgeek</option>
+                                        <option value="drunkenslug">DrunkenSlug</option>
+                                        <option value="nzbfinder">NZBFinder</option>
+                                        <option value="custom">Custom</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" style="flex: 1;">
+                                    <label for="nzb-indexer-api-key">API Key</label>
+                                    <div class="password-input-wrapper">
+                                        <input type="password" id="nzb-indexer-api-key" name="nzb_indexer_api_key" placeholder="Your indexer API key">
+                                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('nzb-indexer-api-key', 'nzb-key-toggle')" aria-label="Toggle visibility">
+                                            <span id="nzb-key-toggle">show</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group hidden" id="nzb-indexer-url-group">
+                                <label for="nzb-indexer-url">API URL</label>
+                                <input type="text" id="nzb-indexer-url" name="nzb_indexer_url" placeholder="https://api.example.com">
+                            </div>
+                        </div>
+                    </fieldset>
 
                     <fieldset>
                         <legend>Cloudflare Tunnel (Remote Access)</legend>
@@ -186,7 +274,12 @@
                             </div>
                             <div class="form-group">
                                 <label for="cf-token">Cloudflare Tunnel Token</label>
-                                <input type="password" id="cf-token" name="cf_token">
+                                <div class="password-input-wrapper">
+                                    <input type="password" id="cf-token" name="cf_token">
+                                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('cf-token', 'cf-token-toggle')" aria-label="Toggle visibility">
+                                        <span id="cf-token-toggle">show</span>
+                                    </button>
+                                </div>
                             </div>
                         </div>
                     </fieldset>
@@ -236,12 +329,14 @@
                     <button class="btn btn-primary" onclick="beginInstall()" id="btn-install">
                         Install
                     </button>
-                    <button class="btn btn-next hidden" onclick="nextStep()" id="btn-next-install">
-                        Next: Complete
-                    </button>
-                    <button class="btn btn-primary hidden" onclick="reinstall()" id="btn-reinstall">
-                        Reinstall
-                    </button>
+                    <div class="btn-group hidden" id="btn-group-complete">
+                        <button class="btn btn-primary" onclick="reinstall()" id="btn-reinstall">
+                            Reinstall
+                        </button>
+                        <button class="btn btn-next" onclick="nextStep()" id="btn-next-install">
+                            Next: Complete
+                        </button>
+                    </div>
                     <button class="btn btn-secondary" onclick="prevStep()" id="btn-back-install">
                         Back
                     </button>

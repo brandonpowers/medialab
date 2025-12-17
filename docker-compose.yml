@@ -291,24 +291,9 @@ services:
       - ${OPTICAL_SG_DEVICE:-/dev/sg1}:${OPTICAL_SG_DEVICE:-/dev/sg1}  # SCSI generic device
       - /dev/dri:/dev/dri  # GPU hardware acceleration for transcoding
     volumes:
+      - ./data/arm/home:/home/arm  # Mount entire home dir to control permissions
       - ./data/arm/config:/etc/arm/config
-      - ./data/arm/db:/home/arm/db
-      - ./data/arm/logs:/home/arm/logs
       - ${MEDIA_ROOT}/arm:/home/arm/media  # Temporary storage during ripping (on external drive)
       - ${MEDIA_ROOT}:/home/arm/movies  # Final output (ARM adds movies/ or tv/ subfolder)
       - /run/udev:/run/udev:ro  # udev events for automatic disc detection
     logging: *default-logging
-
-  uptime-kuma:
-    image: louislam/uptime-kuma:2
-    container_name: uptime-kuma
-    restart: unless-stopped
-    ports:
-      - "3001:3001"
-    volumes:
-      - uptime_kuma_data:/app/data
-    <<: *default-security
-    logging: *default-logging
-
-volumes:
-  uptime_kuma_data:

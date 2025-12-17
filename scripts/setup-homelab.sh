@@ -1275,7 +1275,6 @@ show_access_info() {
     echo "  SABnzbd:        http://${lan_ip}:8085"
     echo "  Tdarr:          http://${lan_ip}:8265"
     echo "  ARM:            http://${lan_ip}:8090"
-    echo "  Uptime Kuma:    http://${lan_ip}:3001"
 
     echo -e "\n${YELLOW}Next Steps:${NC}"
     if [ "$cf_configured" = true ]; then

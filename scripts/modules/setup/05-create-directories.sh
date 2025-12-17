@@ -57,9 +57,9 @@ main() {
         "data/tdarr/logs"
         "data/tdarr/temp"
         "data/arm/config"
-        "data/arm/db"
-        "data/arm/logs"
-        "data/uptime-kuma/data"
+        "data/arm/home"
+        "data/arm/home/db"
+        "data/arm/home/logs"
     )
 
     local created=0

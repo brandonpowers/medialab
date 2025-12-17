@@ -286,8 +286,12 @@ After successful installation:
 
 ## Backup Strategy
 
-See [Backup & Recovery](backup-recovery.md) for:
-- Automated backup scripts
-- Database backup procedures
-- Media file backup
-- Disaster recovery process
+Important directories to backup regularly:
+- `./data/` - All service configurations and databases
+- `.env` - Your environment configuration
+- `docker-compose.yml` - Service definitions
+
+```bash
+# Create backup
+tar -czf homelab-backup-$(date +%Y%m%d).tar.gz ./data .env docker-compose.yml
+```

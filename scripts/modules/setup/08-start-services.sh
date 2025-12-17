@@ -88,7 +88,6 @@ show_access_info() {
     echo "  SABnzbd:        http://${lan_ip}:8085"
     echo "  Tdarr:          http://${lan_ip}:8265"
     echo "  ARM:            http://${lan_ip}:8090"
-    echo "  Uptime Kuma:    http://${lan_ip}:3001"
 }
 
 # ============================================
@@ -119,10 +118,17 @@ main() {
 
     report_progress 2 4 "Configuration valid" "complete"
 
-    # Step 3: Start services
-    report_progress 3 4 "Starting all services..."
+    # Step 3: Stop and recreate services
+    report_progress 3 4 "Starting services..."
 
-    if docker compose up -d; then
+    # Stop existing containers first (ensures clean reinstall)
+    if docker compose ps -q 2>/dev/null | grep -q .; then
+        report_log "info" "Stopping existing containers..."
+        docker compose down --remove-orphans 2>/dev/null || true
+    fi
+
+    # Start fresh containers
+    if docker compose up -d --force-recreate; then
         report_progress 3 4 "Services started" "complete"
     else
         report_progress 3 4 "Failed to start some services" "error"

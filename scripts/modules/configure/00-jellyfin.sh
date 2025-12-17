@@ -70,7 +70,7 @@ main() {
 
     print_section "Configuring Jellyfin"
 
-    # Wait for Jellyfin to be ready
+    # Wait for Jellyfin to be ready (basic API)
     report_log "info" "Waiting for Jellyfin to be ready..."
     local max_wait=60
     local waited=0
@@ -88,13 +88,18 @@ main() {
 
     report_log "success" "Jellyfin is responding"
 
-    # Check if wizard is already complete
-    if check_wizard_complete; then
-        report_log "info" "Jellyfin setup wizard already completed"
-        report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
-        finish_progress "complete" "$MODULE_NAME"
-        return 0
-    fi
+    # Wait for Startup API to be fully ready (needs extra time after basic API is up)
+    report_log "info" "Waiting for Jellyfin startup API..."
+    waited=0
+    while ! curl -s "${JELLYFIN_URL}/Startup/User" \
+        -H "X-Emby-Authorization: MediaBrowser Client=\"Homelab\", Device=\"Setup\", DeviceId=\"setup\", Version=\"1.0\"" 2>/dev/null | grep -q "Name"; do
+        sleep 2
+        waited=$((waited + 2))
+        if [[ $waited -ge 30 ]]; then
+            report_log "warning" "Jellyfin startup API not ready - may need manual setup"
+            break
+        fi
+    done
 
     # Check if we have password
     if [[ -z "$admin_pass" ]]; then
@@ -105,13 +110,17 @@ main() {
         return 0
     fi
 
-    report_log "info" "Completing Jellyfin setup wizard..."
+    # Check if wizard is already complete
+    if check_wizard_complete; then
+        report_log "warning" "Jellyfin wizard already completed - cannot auto-configure"
+        report_log "info" "To reconfigure, run: docker compose down && sudo rm -rf data/jellyfin/config/* && docker compose up -d"
+        report_log "info" "Then run: ./homelab configure"
+        report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
+        finish_progress "complete" "$MODULE_NAME"
+        return 0
+    fi
 
-    # Step 1: Get initial configuration
-    local initial_config
-    initial_config=$(jellyfin_api GET "/Startup/Configuration" 2>/dev/null || echo '{}')
-
-    # Step 2: Set startup configuration (language, metadata country)
+    # Language/culture mapping
     local ui_culture="en-US"
     local metadata_country="US"
 
@@ -129,26 +138,29 @@ main() {
         ko) ui_culture="ko"; metadata_country="KR" ;;
     esac
 
+    # Run startup wizard - must happen BEFORE wizard is completed elsewhere
+    report_log "info" "Running Jellyfin setup wizard..."
+
+    # Step 1: Set startup configuration (language, metadata settings)
     local config_payload
     config_payload=$(jq -n \
         --arg uiCulture "$ui_culture" \
         --arg metadataCountry "$metadata_country" \
-        --arg serverName "$server_name" \
         '{
             "UICulture": $uiCulture,
             "MetadataCountryCode": $metadataCountry,
-            "PreferredMetadataLanguage": $uiCulture,
-            "ServerName": $serverName
+            "PreferredMetadataLanguage": $uiCulture
         }')
 
     if jellyfin_api POST "/Startup/Configuration" "$config_payload" > /dev/null 2>&1; then
-        report_log "success" "Set Jellyfin configuration"
+        report_log "success" "Set language/metadata configuration"
     else
-        report_log "warning" "Could not set Jellyfin configuration"
+        report_log "warning" "Could not set configuration"
     fi
 
-    # Step 3: Create admin user
-    report_log "info" "Creating admin user: $admin_user"
+    # Step 2: Update the default startup user with our credentials
+    # On fresh install, Jellyfin has a default user that we UPDATE (not create)
+    report_log "info" "Setting admin user: $admin_user"
 
     local user_payload
     user_payload=$(jq -n \
@@ -159,32 +171,94 @@ main() {
             "Password": $password
         }')
 
-    if jellyfin_api POST "/Startup/User" "$user_payload" > /dev/null 2>&1; then
-        report_log "success" "Created admin user"
+    local user_result
+    user_result=$(jellyfin_api POST "/Startup/User" "$user_payload" 2>&1)
+    local user_status=$?
+
+    if [[ $user_status -eq 0 ]] && [[ ! "$user_result" =~ "Error" ]]; then
+        report_log "success" "Admin user configured"
     else
-        report_log "warning" "Could not create admin user - may already exist"
+        report_log "error" "Failed to configure admin user - wizard may have been completed elsewhere"
+        report_log "info" "Error: $user_result"
     fi
 
-    # Step 4: Complete the wizard
+    # Step 3: Complete the setup wizard
     report_log "info" "Completing setup wizard..."
 
-    if jellyfin_api POST "/Startup/Complete" "" > /dev/null 2>&1; then
+    if jellyfin_api POST "/Startup/Complete" > /dev/null 2>&1; then
         report_log "success" "Setup wizard completed"
     else
-        report_log "warning" "Could not complete wizard - may need manual completion"
+        report_log "warning" "Could not complete wizard via API"
     fi
 
-    # Verify
+    # Step 4: Set server name via config file (more reliable)
     sleep 2
+    docker exec jellyfin sed -i "s|<ServerName>[^<]*</ServerName>|<ServerName>${server_name}</ServerName>|" /config/config/system.xml 2>/dev/null || true
+    docker exec jellyfin sed -i "s|<ServerName />|<ServerName>${server_name}</ServerName>|" /config/config/system.xml 2>/dev/null || true
+
+    # Verify completion
+    sleep 1
     if check_wizard_complete; then
-        report_log "success" "Jellyfin is ready"
+        report_log "success" "Jellyfin configured successfully"
+        report_log "info" "Server name: $server_name"
+        report_log "info" "Admin user: $admin_user"
         report_log "info" "Access at: ${JELLYFIN_URL}"
+
+        # Step 5: Configure media libraries
+        report_log "info" "Configuring media libraries..."
+
+        # Authenticate to get access token
+        local auth_response
+        auth_response=$(curl -s -X POST "${JELLYFIN_URL}/Users/AuthenticateByName" \
+            -H "Content-Type: application/json" \
+            -H "X-Emby-Authorization: MediaBrowser Client=\"Homelab Setup\", Device=\"Setup Script\", DeviceId=\"homelab-setup\", Version=\"1.0\"" \
+            -d "{\"Username\": \"$admin_user\", \"Pw\": \"$admin_pass\"}" 2>/dev/null)
+
+        local access_token
+        access_token=$(echo "$auth_response" | jq -r '.AccessToken // empty' 2>/dev/null)
+
+        if [[ -n "$access_token" ]]; then
+            # Check if libraries already exist
+            local existing_libs
+            existing_libs=$(curl -s "${JELLYFIN_URL}/Library/VirtualFolders" \
+                -H "X-Emby-Token: $access_token" 2>/dev/null | jq -r '.[].Name' 2>/dev/null)
+
+            # Add Movies library
+            if ! echo "$existing_libs" | grep -q "^Movies$"; then
+                curl -s -X POST "${JELLYFIN_URL}/Library/VirtualFolders?collectionType=movies&refreshLibrary=false&name=Movies" \
+                    -H "X-Emby-Token: $access_token" \
+                    -H "Content-Type: application/json" \
+                    -d '{"LibraryOptions": {"PathInfos": [{"Path": "/media/movies"}], "EnableRealtimeMonitor": true, "PreferredMetadataLanguage": "en", "MetadataCountryCode": "US"}}' > /dev/null 2>&1 && \
+                    report_log "success" "Added Movies library" || report_log "warning" "Could not add Movies library"
+            fi
+
+            # Add TV Shows library
+            if ! echo "$existing_libs" | grep -q "^TV Shows$"; then
+                curl -s -X POST "${JELLYFIN_URL}/Library/VirtualFolders?collectionType=tvshows&refreshLibrary=false&name=TV%20Shows" \
+                    -H "X-Emby-Token: $access_token" \
+                    -H "Content-Type: application/json" \
+                    -d '{"LibraryOptions": {"PathInfos": [{"Path": "/media/tv"}], "EnableRealtimeMonitor": true, "PreferredMetadataLanguage": "en", "MetadataCountryCode": "US"}}' > /dev/null 2>&1 && \
+                    report_log "success" "Added TV Shows library" || report_log "warning" "Could not add TV Shows library"
+            fi
+
+            # Add Music library
+            if ! echo "$existing_libs" | grep -q "^Music$"; then
+                curl -s -X POST "${JELLYFIN_URL}/Library/VirtualFolders?collectionType=music&refreshLibrary=false&name=Music" \
+                    -H "X-Emby-Token: $access_token" \
+                    -H "Content-Type: application/json" \
+                    -d '{"LibraryOptions": {"PathInfos": [{"Path": "/media/music"}], "EnableRealtimeMonitor": true, "PreferredMetadataLanguage": "en", "MetadataCountryCode": "US"}}' > /dev/null 2>&1 && \
+                    report_log "success" "Added Music library" || report_log "warning" "Could not add Music library"
+            fi
+        else
+            report_log "warning" "Could not authenticate - libraries may need manual configuration"
+        fi
     else
         report_log "warning" "Wizard may not have completed - check ${JELLYFIN_URL}"
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
     finish_progress "complete" "$MODULE_NAME"
+    return 0
 }
 
 main "$@"

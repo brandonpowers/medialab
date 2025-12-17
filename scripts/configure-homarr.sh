@@ -401,20 +401,6 @@ else
     ((failed++)) || true
 fi
 
-# ═══ MONITORING ═══
-echo ""
-echo -e "${YELLOW}Adding monitoring services...${NC}"
-
-if create_app "Uptime Kuma" \
-    "http://${SERVER_IP}:3001" \
-    "${ICON_BASE}/uptime-kuma.png" \
-    "Service monitoring" \
-    "http://${SERVER_IP}:3001"; then
-    ((added++)) || true
-else
-    ((failed++)) || true
-fi
-
 # ============================================
 # SUMMARY
 # ============================================

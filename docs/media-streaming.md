@@ -404,8 +404,8 @@ Add custom styling:
 
 ### Jellyseerr
 
-- PostgreSQL backend already configured (better performance than SQLite)
-- Regular database maintenance: `docker exec postgres vacuumdb -U homelab jellyseerr`
+- Uses SQLite database (built-in)
+- Database is stored in container config volume
 
 ### Homarr
 

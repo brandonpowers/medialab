@@ -180,8 +180,8 @@ newzbin =
 priority = 0
 EOF
 
-        # Save API key to .env
-        set_env_value "SABNZBD_API_KEY" "$sab_api_key" "true" "$project_root/.env" || true
+        # Note: API key will be synced to .env during configure phase
+        # after container starts (container may regenerate key)
         report_log "success" "Created SABnzbd config with credentials"
     fi
 
@@ -256,7 +256,7 @@ radarr:
   ssl: false
 EOF
 
-            set_env_value "BAZARR_API_KEY" "$bazarr_api_key" "true" "$project_root/.env" || true
+            # Note: API key will be synced to .env during configure phase
             report_log "success" "Created Bazarr config with language: $bazarr_lang"
         fi
     fi
@@ -271,11 +271,9 @@ EOF
         local tdarr_config="$tdarr_config_dir/Tdarr_Server_Config.json"
 
         if [[ ! -f "$tdarr_config" ]]; then
-            local tdarr_api_key
-            tdarr_api_key=$(generate_api_key)
-            local tdarr_auth_key
-            tdarr_auth_key=$(generate_api_key)
-
+            # Note: auth disabled for automated configuration
+            # Tdarr requires manual user creation before API key works
+            # Users can enable auth via web UI after setup
             cat > "$tdarr_config" << EOF
 {
   "serverPort": "8266",
@@ -284,16 +282,11 @@ EOF
   "handbrakePath": "",
   "ffmpegPath": "",
   "mkvpropeditPath": "",
-  "auth": true,
-  "authSecretKey": "${tdarr_auth_key}",
-  "seededApiKey": "${tdarr_api_key}",
+  "auth": false,
   "logLevel": "info"
 }
 EOF
-
-            set_env_value "TDARR_API_KEY" "$tdarr_api_key" "true" "$project_root/.env" || true
-            set_env_value "TDARR_AUTH_KEY" "$tdarr_auth_key" "true" "$project_root/.env" || true
-            report_log "success" "Created Tdarr config with authentication"
+            report_log "success" "Created Tdarr config (auth disabled for auto-setup)"
         fi
     fi
 

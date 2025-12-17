@@ -4,14 +4,13 @@ A complete, privacy-first media server stack running on Ubuntu Server 24.04 LTS.
 
 ## Overview
 
-**16 Docker services** providing:
+**15 Docker services** providing:
 - Media streaming and management (movies, TV, music)
-- Privacy-first remote access (Cloudflare Tunnel)
+- Privacy-first remote access (Cloudflare Tunnel - optional)
 - Complete automation (*arr stack with TRaSH Guides integration)
 - Dual download methods (Usenet + Torrents)
 - Automated transcoding (Tdarr with GPU acceleration)
 - Blu-ray/DVD ripping (ARM - Automatic Ripping Machine)
-- Service monitoring and management
 
 ## Quick Start
 
@@ -102,7 +101,7 @@ For detailed information about automated configuration, see **[Automated Configu
 
 ### Infrastructure
 - **[Network & Remote Access](docs/networking.md)** - Cloudflare Tunnel setup and security
-- **[Monitoring & Management](docs/monitoring.md)** - Uptime Kuma, Tdarr, ARM
+- **[Media Processing](docs/monitoring.md)** - Tdarr transcoding, ARM disc ripping
 
 ### Special Features
 - **Automatic Blu-ray Ripping** - ARM automatically rips discs, Tdarr transcodes with GPU acceleration
@@ -139,8 +138,7 @@ For detailed information about automated configuration, see **[Automated Configu
   |  |    Jellyfin, Jellyseerr, Homarr     |  |
   |  |                                     |  |
   |  |  PRIVATE (LAN only):                |  |
-  |  |    *arr apps, Downloads, Tdarr      |  |
-  |  |    ARM, Uptime Kuma                 |  |
+  |  |    *arr apps, Downloads, Tdarr, ARM |  |
   |  +-------------------------------------+  |
   +-------------------------------------------+
 ```
@@ -175,7 +173,6 @@ Access from your local network:
 | SABnzbd | 8085 | http://SERVER_IP:8085 |
 | Tdarr | 8265 | http://SERVER_IP:8265 |
 | ARM | 8090 | http://SERVER_IP:8090 |
-| Uptime Kuma | 3001 | http://SERVER_IP:3001 |
 
 ## Services
 
@@ -196,7 +193,6 @@ Access from your local network:
 | **SABnzbd** | Usenet download client | 8085 |
 | **Tdarr** | Automated transcoding | 8265 |
 | **ARM** | Blu-ray/DVD ripping | 8090 |
-| **Uptime Kuma** | Service monitoring | 3001 |
 
 ## Maintenance
 

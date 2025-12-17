@@ -38,12 +38,6 @@ Run daily via cron:
 0 2 * * * /opt/homelab/backup.sh
 ```
 
-### 3. Set Up Uptime Kuma Notifications
-Get alerts when services go down:
-- Settings → Notifications
-- Add Discord/Telegram/Email
-- Enable on all monitors
-
 ## User Experience Enhancements
 
 ### Komga - Comics & Manga Server
@@ -345,7 +339,6 @@ Things to avoid to keep your stack lean:
 ❌ **Plex** - You have Jellyfin (open-source, no paywalls)
 ❌ **Emby** - Same as Plex
 ❌ **Prometheus/Grafana** - Overkill for homelab unless you love metrics
-❌ **Netdata** - Uptime Kuma is sufficient for monitoring
 ❌ **Multiple dashboards** - Pick one (Homarr or Homepage)
 ❌ **Duplicate *arr apps** - One of each is enough
 
@@ -358,13 +351,12 @@ Things to avoid to keep your stack lean:
 
 ## Your Stack is Complete!
 
-Remember: Your current 24 services include all essential 2025 features:
+Remember: Your current stack includes all essential 2025 features:
 - ✅ Privacy-first remote access
 - ✅ Rich media types (movies, TV, music, audiobooks, podcasts, e-books)
 - ✅ Full automation (*arr stack with quality management)
 - ✅ Dual downloads (Usenet + torrents)
 - ✅ Storage optimization (Tdarr)
-- ✅ Monitoring (Uptime Kuma)
 
 Everything above is **optional**. Focus on using what you have!
 

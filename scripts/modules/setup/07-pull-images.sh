@@ -63,7 +63,7 @@ main() {
 
     while IFS= read -r service; do
         [[ -z "$service" ]] && continue
-        ((current++))
+        ((++current))
 
         if [[ "$OUTPUT_MODE" == "json" ]]; then
             echo "{\"type\":\"pull\",\"service\":\"$service\",\"current\":$current,\"total\":$total}"
@@ -75,7 +75,7 @@ main() {
             report_log "success" "Pulled $service"
         else
             report_log "warning" "Failed to pull $service"
-            ((failed++))
+            ((++failed))
         fi
     done <<< "$services"
 
@@ -84,7 +84,7 @@ main() {
     if [[ $failed -gt 0 ]]; then
         report_progress 3 3 "Pulled images ($failed failed)" "warning"
 
-        if [[ "$OUTPUT_MODE" != "json" ]]; then
+        if [[ "$OUTPUT_MODE" != "json" && -t 0 ]]; then
             echo ""
             read -r -p "Continue anyway? (y/N): " response
             if [[ ! "$response" =~ ^[Yy]$ ]]; then

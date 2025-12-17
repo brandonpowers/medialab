@@ -88,6 +88,56 @@ main() {
         report_log "success" "RIPMETHOD_BR set to backup (better for protected Blu-rays)"
     fi
 
+    # Configure ARM web UI authentication
+    local admin_user="${ADMIN_USERNAME:-admin}"
+    local admin_pass="${ADMIN_PASSWORD:-}"
+
+    if [[ -n "$admin_pass" ]] && docker ps --format '{{.Names}}' | grep -q "^arm$"; then
+        print_info "Configuring ARM web authentication..."
+
+        # Wait for ARM database to be created (ARM initializes it on first run)
+        local db_wait=0
+        while ! docker exec arm test -f /home/arm/db/arm.db 2>/dev/null; do
+            sleep 2
+            db_wait=$((db_wait + 2))
+            if [[ $db_wait -ge 30 ]]; then
+                report_log "warning" "ARM database not found - ARM may need manual configuration"
+                break
+            fi
+        done
+
+        if docker exec arm test -f /home/arm/db/arm.db 2>/dev/null; then
+            # ARM only supports ONE admin user (always uses User.query.first())
+            # Must update user_id=1 and store hash as BYTES via Flask-SQLAlchemy
+            docker exec arm python3 -c "
+import sys
+sys.path.insert(0, '/opt/arm')
+import bcrypt
+
+from arm.ui import db, app
+from arm.models.user import User
+
+username = '${admin_user}'
+password = '${admin_pass}'
+
+with app.app_context():
+    # ARM only supports one admin - always update the first user
+    admin = User.query.first()
+    if admin:
+        # Generate bcrypt hash (stored as bytes by SQLAlchemy)
+        new_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(12))
+        admin.email = username
+        admin.password = new_hash
+        admin.hash = new_hash
+        db.session.commit()
+        print(f'Updated admin user: {username}')
+    else:
+        print('No admin user found - ARM may need manual setup', file=sys.stderr)
+        sys.exit(1)
+" 2>&1 && report_log "success" "ARM authentication configured for user: $admin_user" || report_log "warning" "Could not configure ARM authentication"
+        fi
+    fi
+
     # Configure MakeMKV settings inside container
     print_info "Configuring MakeMKV settings inside ARM container..."
 

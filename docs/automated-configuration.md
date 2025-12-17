@@ -59,7 +59,7 @@ cd /opt/homelab
 This will:
 - Create all data directories
 - Generate `.env` file with secure encryption key
-- Start all 16 Docker services
+- Start all 15 Docker services
 - Wait for services to initialize
 
 ### Step 2: Wait for Services to Start

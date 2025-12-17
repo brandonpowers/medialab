@@ -15,6 +15,93 @@ let installCompleted = false;
 // API Base URL
 const API_BASE = '/cgi-bin';
 
+// localStorage key for form persistence
+const FORM_STORAGE_KEY = 'homelab_setup_form';
+
+// ============================================
+// FORM PERSISTENCE
+// ============================================
+
+// List of form field IDs to persist
+const PERSIST_FIELDS = [
+    // Step 1: Hardware (timezone dropdown)
+    'timezone',
+    // Step 2: Storage
+    'media-path', 'format-drive',
+    // Step 3: Admin
+    'server-name', 'language', 'admin-email', 'admin-user', 'admin-pass',
+    // Step 4: Services
+    'tmdb-key',
+    'enable-usenet', 'usenet-host', 'usenet-port', 'usenet-connections', 'usenet-ssl', 'usenet-user', 'usenet-pass',
+    'enable-nzb-indexer', 'nzb-indexer-type', 'nzb-indexer-api-key', 'nzb-indexer-url',
+    'enable-cloudflare', 'domain', 'cf-token'
+];
+
+function saveFormData() {
+    const formData = {};
+    PERSIST_FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            if (el.type === 'checkbox') {
+                formData[id] = el.checked;
+            } else {
+                formData[id] = el.value;
+            }
+        }
+    });
+    // Also save selected drive
+    const selectedDriveRadio = document.querySelector('input[name="drive"]:checked');
+    if (selectedDriveRadio) {
+        formData['_selectedDrive'] = selectedDriveRadio.value;
+    }
+    try {
+        localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(formData));
+    } catch (e) {
+        console.warn('Could not save form data to localStorage:', e);
+    }
+}
+
+function loadFormData() {
+    try {
+        const saved = localStorage.getItem(FORM_STORAGE_KEY);
+        if (!saved) return;
+
+        const formData = JSON.parse(saved);
+        PERSIST_FIELDS.forEach(id => {
+            const el = document.getElementById(id);
+            if (el && formData[id] !== undefined) {
+                if (el.type === 'checkbox') {
+                    el.checked = formData[id];
+                } else {
+                    el.value = formData[id];
+                }
+            }
+        });
+        // Restore selected drive (will be applied after drives load)
+        if (formData['_selectedDrive']) {
+            selectedDrive = formData['_selectedDrive'];
+        }
+    } catch (e) {
+        console.warn('Could not load form data from localStorage:', e);
+    }
+}
+
+function setupFormPersistence() {
+    PERSIST_FIELDS.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const eventType = (el.type === 'checkbox' || el.tagName === 'SELECT') ? 'change' : 'input';
+            el.addEventListener(eventType, saveFormData);
+        }
+    });
+    // Also listen for drive selection changes
+    document.addEventListener('change', (e) => {
+        if (e.target.name === 'drive') {
+            saveFormData();
+        }
+    });
+}
+
 // ============================================
 // STEP NAVIGATION
 // ============================================
@@ -81,17 +168,25 @@ function populateTimezoneDropdown(detectedTimezone) {
     const select = document.getElementById('timezone');
     const detected = detectedTimezone || 'America/Chicago';
 
+    // Check if there's already a saved timezone value (from localStorage)
+    const savedTimezone = select.value;
+    const timezoneToSelect = savedTimezone || detected;
+
     // Add detected timezone first if not in list
     let tzList = [...timezones];
     if (detected && !tzList.includes(detected)) {
         tzList.unshift(detected);
+    }
+    // Also add saved timezone if not in list
+    if (savedTimezone && !tzList.includes(savedTimezone)) {
+        tzList.unshift(savedTimezone);
     }
 
     // Sort alphabetically
     tzList.sort();
 
     select.innerHTML = tzList.map(tz => {
-        const selected = tz === detected ? 'selected' : '';
+        const selected = tz === timezoneToSelect ? 'selected' : '';
         return `<option value="${tz}" ${selected}>${tz.replace(/_/g, ' ')}</option>`;
     }).join('');
 }
@@ -244,13 +339,32 @@ async function loadDrives() {
 
         container.innerHTML = html;
 
-        // Select first non-system drive, or first drive if all are system
-        const firstNonSystem = driveData.drives.findIndex(d => !d.is_system);
-        const defaultIdx = firstNonSystem >= 0 ? firstNonSystem : 0;
+        // Check if we have a saved drive selection from localStorage
+        const savedDriveIdx = selectedDrive ? driveData.drives.findIndex(d => d.device === selectedDrive) : -1;
+
+        // Use saved selection if valid, otherwise default to first non-system drive
+        let defaultIdx;
+        if (savedDriveIdx >= 0) {
+            defaultIdx = savedDriveIdx;
+        } else {
+            const firstNonSystem = driveData.drives.findIndex(d => !d.is_system);
+            defaultIdx = firstNonSystem >= 0 ? firstNonSystem : 0;
+        }
+
         selectedDrive = driveData.drives[defaultIdx]?.device;
 
-        // Update media path based on selected drive
-        updateMediaPath(driveData.drives[defaultIdx]);
+        // Update radio button selection
+        const driveRadio = document.querySelector(`input[name="drive"][value="${selectedDrive}"]`);
+        if (driveRadio) {
+            driveRadio.checked = true;
+            driveRadio.closest('.drive-item')?.classList.add('selected');
+        }
+
+        // Only update media path if it's empty (don't override saved value)
+        const pathInput = document.getElementById('media-path');
+        if (!pathInput.value) {
+            updateMediaPath(driveData.drives[defaultIdx]);
+        }
         updateFormatCheckbox(driveData.drives[defaultIdx]);
 
         document.getElementById('btn-next-2').disabled = false;
@@ -346,6 +460,30 @@ function toggleCloudflare() {
 }
 
 // ============================================
+// USENET TOGGLES
+// ============================================
+
+function toggleUsenet() {
+    const enabled = document.getElementById('enable-usenet').checked;
+    const fields = document.getElementById('usenet-fields');
+    fields.classList.toggle('hidden', !enabled);
+}
+
+function toggleNzbIndexer() {
+    const enabled = document.getElementById('enable-nzb-indexer').checked;
+    const fields = document.getElementById('nzb-indexer-fields');
+    fields.classList.toggle('hidden', !enabled);
+}
+
+function updateNzbIndexerUrl() {
+    const indexerType = document.getElementById('nzb-indexer-type').value;
+    const urlGroup = document.getElementById('nzb-indexer-url-group');
+
+    // Show URL field only for custom indexer
+    urlGroup.classList.toggle('hidden', indexerType !== 'custom');
+}
+
+// ============================================
 // ADMIN VALIDATION
 // ============================================
 
@@ -413,16 +551,24 @@ function validatePassword() {
     updateAdminNextButton();
 }
 
-function togglePasswordVisibility() {
-    const passInput = document.getElementById('admin-pass');
-    const toggleText = document.getElementById('eye-icon');
+function togglePasswordVisibility(inputId, toggleId) {
+    // Support old single-argument call for backwards compatibility
+    if (!toggleId) {
+        inputId = 'admin-pass';
+        toggleId = 'eye-icon';
+    }
 
-    if (passInput.type === 'password') {
-        passInput.type = 'text';
-        toggleText.textContent = 'hide';
-    } else {
-        passInput.type = 'password';
-        toggleText.textContent = 'show';
+    const passInput = document.getElementById(inputId);
+    const toggleText = document.getElementById(toggleId);
+
+    if (passInput && toggleText) {
+        if (passInput.type === 'password') {
+            passInput.type = 'text';
+            toggleText.textContent = 'hide';
+        } else {
+            passInput.type = 'password';
+            toggleText.textContent = 'show';
+        }
     }
 }
 
@@ -457,6 +603,7 @@ const configureModules = [
     { id: '00-jellyfin', name: 'Configure Jellyfin', phase: 'configure', container: 'jellyfin' },
     { id: '01-wait-services', name: 'Wait for Services', phase: 'configure' },
     { id: '02-qbittorrent', name: 'Configure qBittorrent', phase: 'configure', container: 'qbittorrent' },
+    { id: '02b-sabnzbd', name: 'Configure SABnzbd', phase: 'configure', container: 'sabnzbd' },
     { id: '03-prowlarr', name: 'Configure Prowlarr', phase: 'configure', container: 'prowlarr' },
     { id: '04-sonarr', name: 'Configure Sonarr', phase: 'configure', container: 'sonarr' },
     { id: '05-radarr', name: 'Configure Radarr', phase: 'configure', container: 'radarr' },
@@ -480,9 +627,9 @@ let serviceConfigStatus = {};
 function prepareInstall() {
     console.log('prepareInstall called, installCompleted:', installCompleted);
 
-    // If installation already completed, show Reinstall and Back buttons but don't reset the UI
+    // If installation already completed, show Reinstall/Next buttons and Back but don't reset the UI
     if (installCompleted) {
-        document.getElementById('btn-reinstall').classList.remove('hidden');
+        document.getElementById('btn-group-complete').classList.remove('hidden');
         document.getElementById('btn-back-install').classList.remove('hidden');
         return;
     }
@@ -515,6 +662,21 @@ function prepareInstall() {
         },
         api_keys: {
             tmdb: getVal('tmdb-key')
+        },
+        usenet: {
+            enabled: getChecked('enable-usenet'),
+            host: getVal('usenet-host'),
+            port: parseInt(getVal('usenet-port')) || 563,
+            username: getVal('usenet-user'),
+            password: getVal('usenet-pass'),
+            connections: parseInt(getVal('usenet-connections')) || 30,
+            ssl: getChecked('usenet-ssl')
+        },
+        nzb_indexer: {
+            enabled: getChecked('enable-nzb-indexer'),
+            type: getVal('nzb-indexer-type'),
+            api_key: getVal('nzb-indexer-api-key'),
+            url: getVal('nzb-indexer-url')
         }
     };
 
@@ -524,7 +686,7 @@ function prepareInstall() {
 
     // Reset UI visibility
     document.getElementById('btn-install').classList.remove('hidden');
-    document.getElementById('btn-next-install').classList.add('hidden');
+    document.getElementById('btn-group-complete').classList.add('hidden');
     document.getElementById('btn-back-install').classList.remove('hidden');
     document.getElementById('btn-cancel').classList.add('hidden');
     document.getElementById('btn-diagnostic').classList.add('hidden');
@@ -598,6 +760,25 @@ function showConfigSummary() {
         items.push({ label: 'TMDB API', value: '••••••••', masked: true });
     }
 
+    // Add Usenet if enabled
+    if (config.usenet?.enabled) {
+        items.push({ label: 'Usenet', value: `${config.usenet.host}:${config.usenet.port}` });
+        if (config.usenet.username) {
+            items.push({ label: 'Usenet User', value: config.usenet.username });
+        }
+    }
+
+    // Add NZB Indexer if enabled
+    if (config.nzb_indexer?.enabled) {
+        const indexerNames = {
+            'nzbgeek': 'NZBgeek',
+            'drunkenslug': 'DrunkenSlug',
+            'nzbfinder': 'NZBFinder',
+            'custom': 'Custom'
+        };
+        items.push({ label: 'NZB Indexer', value: indexerNames[config.nzb_indexer.type] || config.nzb_indexer.type });
+    }
+
     summary.innerHTML = items.map(item => `
         <div class="summary-item">
             <span class="summary-label">${item.label}</span>
@@ -629,8 +810,7 @@ function reinstall() {
     installCancelledByUser = false;
 
     // Hide Reinstall/Next buttons, show Cancel
-    document.getElementById('btn-reinstall').classList.add('hidden');
-    document.getElementById('btn-next-install').classList.add('hidden');
+    document.getElementById('btn-group-complete').classList.add('hidden');
     document.getElementById('btn-back-install').classList.add('hidden');
     document.getElementById('btn-cancel').classList.remove('hidden');
 
@@ -733,9 +913,9 @@ async function runInstallation() {
     } else {
         progressBar.classList.add('success');
         installCompleted = true;
-        // Show Next button, hide Install button, and auto-advance to step 6 (Complete) on success
+        // Show Next/Reinstall buttons, hide Install button, and auto-advance to step 6 (Complete) on success
         document.getElementById('btn-install').classList.add('hidden');
-        document.getElementById('btn-next-install').classList.remove('hidden');
+        document.getElementById('btn-group-complete').classList.remove('hidden');
         setTimeout(() => {
             goToStep(6);
         }, 1000);
@@ -962,10 +1142,9 @@ const services = [
     { name: 'Prowlarr', port: 9696, container: 'prowlarr', hasConfig: true },
     { name: 'Bazarr', port: 6767, container: 'bazarr', hasConfig: true },
     { name: 'qBittorrent', port: 8080, container: 'qbittorrent', hasConfig: true },
-    { name: 'SABnzbd', port: 8085, container: 'sabnzbd', hasConfig: false },
+    { name: 'SABnzbd', port: 8085, container: 'sabnzbd', hasConfig: true },
     { name: 'Tdarr', port: 8265, container: 'tdarr', hasConfig: true },
-    { name: 'ARM', port: 8090, container: 'arm', hasConfig: true },
-    { name: 'Uptime Kuma', port: 3001, container: 'uptime-kuma', hasConfig: false }
+    { name: 'ARM', port: 8090, container: 'arm', hasConfig: true }
 ];
 
 async function loadServiceStatus() {
@@ -1321,6 +1500,61 @@ async function runConfigModuleWithSSE(module, logOutput) {
 // INITIALIZE
 // ============================================
 
+// Initialize toggle field visibility based on checkbox states
+function initToggleFields() {
+    // Sync Usenet fields visibility
+    const usenetCheckbox = document.getElementById('enable-usenet');
+    if (usenetCheckbox) {
+        const usenetFields = document.getElementById('usenet-fields');
+        if (usenetFields) {
+            usenetFields.classList.toggle('hidden', !usenetCheckbox.checked);
+        }
+    }
+
+    // Sync NZB Indexer fields visibility
+    const nzbCheckbox = document.getElementById('enable-nzb-indexer');
+    if (nzbCheckbox) {
+        const nzbFields = document.getElementById('nzb-indexer-fields');
+        if (nzbFields) {
+            nzbFields.classList.toggle('hidden', !nzbCheckbox.checked);
+        }
+    }
+
+    // Sync Cloudflare fields visibility
+    const cfCheckbox = document.getElementById('enable-cloudflare');
+    if (cfCheckbox) {
+        const cfFields = document.getElementById('cloudflare-fields');
+        if (cfFields) {
+            cfFields.classList.toggle('hidden', !cfCheckbox.checked);
+        }
+    }
+
+    // Sync NZB indexer URL visibility based on type
+    const indexerType = document.getElementById('nzb-indexer-type');
+    if (indexerType) {
+        const urlGroup = document.getElementById('nzb-indexer-url-group');
+        if (urlGroup) {
+            urlGroup.classList.toggle('hidden', indexerType.value !== 'custom');
+        }
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    loadFormData();
+    setupFormPersistence();
     detectHardware();
+    initToggleFields();
+
+    // Re-validate forms after loading saved data to enable/disable Next buttons correctly
+    if (typeof validatePassword === 'function') validatePassword();
+    if (typeof validateUsername === 'function') {
+        const usernameInput = document.getElementById('admin-user');
+        if (usernameInput) validateUsername(usernameInput);
+    }
+    if (typeof updateAdminNextButton === 'function') updateAdminNextButton();
+});
+
+// Also sync on window load (after browser form restoration)
+window.addEventListener('load', () => {
+    initToggleFields();
 });

@@ -29,47 +29,73 @@ main() {
 
     print_section "Configuring qBittorrent"
 
-    # Get temporary password from logs
-    local temp_pass
-    temp_pass=$(docker compose logs qbittorrent 2>/dev/null | grep -oP 'temporary password is provided for this session: \K\S+' | tail -1 || true)
-
-    # Get credentials from environment or use defaults
-    local qbit_user="${QBIT_USER:-admin}"
-    local qbit_pass="${QBIT_PASS:-$temp_pass}"
-
-    if [[ -z "$qbit_pass" ]]; then
-        if [[ "$OUTPUT_MODE" == "json" ]]; then
-            report_log "warning" "No qBittorrent password available"
+    # Wait for qBittorrent to be fully ready (it may still be starting)
+    report_log "info" "Waiting for qBittorrent to be ready..."
+    local max_wait=30
+    local waited=0
+    while ! curl -s -m 2 "http://localhost:8080/api/v2/app/version" > /dev/null 2>&1; do
+        sleep 2
+        waited=$((waited + 2))
+        if [[ $waited -ge $max_wait ]]; then
+            report_log "warning" "qBittorrent not responding - skipping auto-configuration"
             report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
+            finish_progress "complete" "$MODULE_NAME"
             return 0
         fi
+    done
+    report_log "success" "qBittorrent is ready"
 
-        print_info "Default qBittorrent credentials:"
-        print_info "  Username: admin"
-        if [[ -n "$temp_pass" ]]; then
-            print_info "  Temporary Password: ${temp_pass}"
-        else
-            print_info "  Password: (check logs or use your custom password)"
+    # Get credentials from environment
+    local qbit_user="${QBIT_USER:-admin}"
+    local qbit_pass="${QBIT_PASS:-}"
+    local admin_user="${ADMIN_USERNAME:-admin}"
+    local admin_pass="${ADMIN_PASSWORD:-}"
+    local cookie_file=""
+
+    # Try stored qBittorrent credentials first
+    if [[ -n "$qbit_pass" ]]; then
+        report_log "info" "Trying stored qBittorrent credentials..."
+        cookie_file=$(qbittorrent_login "$qbit_user" "$qbit_pass")
+    fi
+
+    # Try admin credentials (qBittorrent may have been configured to use these)
+    if [[ -z "$cookie_file" && -n "$admin_pass" ]]; then
+        report_log "info" "Trying admin credentials..."
+        cookie_file=$(qbittorrent_login "$admin_user" "$admin_pass")
+        if [[ -n "$cookie_file" ]]; then
+            qbit_user="$admin_user"
+            qbit_pass="$admin_pass"
         fi
-        echo ""
+    fi
 
+    # Try temporary password from logs (for fresh installs)
+    if [[ -z "$cookie_file" ]]; then
+        report_log "info" "Checking for temporary password in logs..."
+        local temp_pass
+        temp_pass=$(docker compose logs qbittorrent 2>/dev/null | grep -oP 'temporary password is provided for this session: \K\S+' | tail -1 || true)
+
+        if [[ -n "$temp_pass" ]]; then
+            report_log "info" "Found temporary password, attempting login..."
+            cookie_file=$(qbittorrent_login "admin" "$temp_pass")
+            if [[ -n "$cookie_file" ]]; then
+                qbit_user="admin"
+                qbit_pass="$temp_pass"
+            fi
+        fi
+    fi
+
+    # In interactive mode, prompt for credentials
+    if [[ -z "$cookie_file" && "$OUTPUT_MODE" != "json" ]]; then
+        print_info "Could not auto-login. Enter credentials manually:"
         read -p "qBittorrent username [admin]: " input_user
         qbit_user=${input_user:-admin}
-
         read -s -p "qBittorrent password: " qbit_pass
         echo ""
+
+        if [[ -n "$qbit_pass" ]]; then
+            cookie_file=$(qbittorrent_login "$qbit_user" "$qbit_pass")
+        fi
     fi
-
-    if [[ -z "$qbit_pass" ]]; then
-        report_log "warning" "No password provided - skipping qBittorrent configuration"
-        report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
-        return 0
-    fi
-
-    print_info "Logging into qBittorrent..."
-
-    local cookie_file
-    cookie_file=$(qbittorrent_login "$qbit_user" "$qbit_pass")
 
     if [[ -n "$cookie_file" ]]; then
         report_log "success" "Logged into qBittorrent"
@@ -123,11 +149,16 @@ main() {
         export QBIT_USER="$qbit_user"
         export QBIT_PASS="$qbit_pass"
 
-        # Save to .env for persistence
-        set_env_value "QBIT_USER" "$qbit_user"
+        # Save to .env for persistence (so future runs can use these)
+        local project_root
+        project_root=$(get_project_root)
+        set_env_value "QBIT_USER" "$qbit_user" "true" "$project_root/.env"
+        set_env_value "QBIT_PASS" "$qbit_pass" "true" "$project_root/.env"
+        report_log "success" "Credentials saved to .env"
     else
-        report_log "warning" "Could not login to qBittorrent - check credentials and configure manually"
-        print_info "Configure at: http://localhost:8080"
+        report_log "warning" "Could not login to qBittorrent"
+        report_log "info" "Configure manually at http://localhost:8080"
+        report_log "info" "Check logs: docker compose logs qbittorrent | grep password"
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

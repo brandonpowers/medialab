@@ -59,6 +59,9 @@ main() {
         return 0
     fi
 
+    # Give Tdarr a moment to fully initialize its database
+    sleep 3
+
     # Get API keys for notifications
     local sonarr_key="${SONARR_API_KEY:-$(get_api_key sonarr)}"
     local radarr_key="${RADARR_API_KEY:-$(get_api_key radarr)}"
@@ -79,7 +82,8 @@ main() {
     local flow_name="h265-${gpu_type}-transcode"
     local flow_id=""
 
-    if echo "$existing_flows" | grep -q "\"name\":\"${flow_name}\""; then
+    # Check for existing flow (handle both compact and pretty JSON)
+    if echo "$existing_flows" | grep -qE "\"name\":[[:space:]]*\"${flow_name}\""; then
         print_info "Tdarr ${gpu_name} flow already exists"
         flow_id=$(echo "$existing_flows" | python3 -c "
 import sys, json
@@ -135,12 +139,30 @@ except: pass
 }
 EOF
 )
-        local flow_response
-        flow_response=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
+        curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
             -H "Content-Type: application/json" \
-            -d "$flow_body" 2>/dev/null)
+            -d "$flow_body" > /dev/null 2>&1
 
-        if echo "$flow_response" | grep -q "\"_id\":\"${flow_id}\""; then
+        # Verify the flow was actually created by querying again
+        sleep 1
+        local verify_flows
+        verify_flows=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
+            -H "Content-Type: application/json" \
+            -d '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}' 2>/dev/null || echo "{}")
+
+        if echo "$verify_flows" | grep -qE "\"name\":[[:space:]]*\"${flow_name}\""; then
+            # Get the actual flow ID that was created
+            flow_id=$(echo "$verify_flows" | python3 -c "
+import sys, json
+flow_name = '${flow_name}'
+try:
+    data = json.load(sys.stdin)
+    for flow in data:
+        if flow.get('name') == flow_name:
+            print(flow.get('_id', ''))
+            break
+except: pass
+" 2>/dev/null || echo "")
             report_log "success" "H.265 ${gpu_name} transcoding flow created"
         else
             report_log "warning" "Could not create flow via API"
@@ -265,6 +287,7 @@ EOF
         report_log "warning" "Could not configure node workers"
 
     report_log "success" "Tdarr fully configured with H.265 ${gpu_name} flow and GPU workers"
+    report_log "info" "To enable auth: visit http://localhost:8265 and create an admin account"
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
     finish_progress "complete" "$MODULE_NAME"
