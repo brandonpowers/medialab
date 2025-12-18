@@ -614,7 +614,7 @@ const configureModules = [
     { id: '10-jellyseerr', name: 'Configure Jellyseerr', phase: 'configure', container: 'jellyseerr' },
     { id: '11-arm', name: 'Configure ARM', phase: 'configure', container: 'arm' },
     { id: '12-tdarr', name: 'Configure Tdarr', phase: 'configure', container: 'tdarr' },
-    { id: '13-homarr', name: 'Configure Homarr', phase: 'configure', container: 'homarr' }
+    { id: '13-homepage', name: 'Verify Homepage', phase: 'configure', container: 'homepage' }
 ];
 
 // Track service configuration status
@@ -1133,7 +1133,7 @@ let configurationStarted = false;
 let configurationComplete = false;
 
 const services = [
-    { name: 'Homarr', port: 7575, container: 'homarr', hasConfig: true },
+    { name: 'Homepage', port: 3000, container: 'homepage', hasConfig: true },
     { name: 'Jellyfin', port: 8096, container: 'jellyfin', hasConfig: true },
     { name: 'Jellyseerr', port: 5055, container: 'jellyseerr', hasConfig: true },
     { name: 'Sonarr', port: 8989, container: 'sonarr', hasConfig: true },
@@ -1156,9 +1156,9 @@ async function loadServiceStatus() {
         clearInterval(serviceRefreshInterval);
     }
 
-    // Reset configuration state if not already complete
-    if (!configurationComplete) {
-        configurationStarted = false;
+    // Reset configuration state only if not already started or complete
+    // This prevents race conditions if loadServiceStatus is called multiple times
+    if (!configurationStarted && !configurationComplete) {
         serviceConfigStatus = {};
 
         // Reset progress bar
@@ -1301,7 +1301,17 @@ async function updateServiceStatus() {
 // AUTO-CONFIGURATION (Step 6)
 // ============================================
 
+// Flag to track if configuration is currently running (prevents duplicate runs)
+let configurationInProgress = false;
+
 async function runConfiguration() {
+    // Guard against duplicate runs
+    if (configurationInProgress || configurationComplete) {
+        console.log('Configuration already in progress or complete, skipping');
+        return;
+    }
+    configurationInProgress = true;
+
     const logOutput = document.getElementById('configure-log-output');
     const progressFill = document.getElementById('configure-progress-fill');
     const progressBar = document.getElementById('configure-progress-bar');
@@ -1377,6 +1387,9 @@ async function runConfiguration() {
     }
 
     // Configuration complete
+    configurationInProgress = false;
+    configurationComplete = true;
+
     const hasErrors = document.querySelectorAll('#configure-module-list .module-status.error').length > 0;
 
     if (hasErrors) {
@@ -1386,8 +1399,6 @@ async function runConfiguration() {
         progressBar.classList.add('success');
         logOutput.textContent += '\n[' + new Date().toLocaleTimeString() + '] Configuration completed successfully!\n';
     }
-
-    configurationComplete = true;
 }
 
 async function runConfigModuleWithSSE(module, logOutput) {

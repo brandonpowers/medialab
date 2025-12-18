@@ -69,14 +69,14 @@ show_access_info() {
     if [[ -n "$cf_token" && "$cf_token" != "your_tunnel_token_here" && -n "$domain" ]]; then
         echo ""
         echo -e "${GREEN}Public Services (via Cloudflare Tunnel):${NC}"
-        echo "  Homarr:         https://homarr.${domain}"
+        echo "  Homepage:       https://home.${domain}"
         echo "  Jellyfin:       https://jellyfin.${domain}"
         echo "  Jellyseerr:     https://jellyseerr.${domain}"
     fi
 
     echo ""
     echo -e "${BLUE}All Services (LAN: ${lan_ip}):${NC}"
-    echo "  Homarr:         http://${lan_ip}:7575"
+    echo "  Homepage:       http://${lan_ip}:3000"
     echo "  Jellyfin:       http://${lan_ip}:8096"
     echo "  Jellyseerr:     http://${lan_ip}:5055"
     echo "  Sonarr:         http://${lan_ip}:8989"

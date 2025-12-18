@@ -78,7 +78,7 @@ declare -A health_urls=(
     ["radarr"]="http://localhost:7878/ping"
     ["prowlarr"]="http://localhost:9696/ping"
     ["qbittorrent"]="http://localhost:8080"
-    ["homarr"]="http://localhost:7575"
+    ["homepage"]="http://localhost:3000"
 )
 
 health_json="{"

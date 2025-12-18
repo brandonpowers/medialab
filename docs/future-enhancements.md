@@ -61,24 +61,10 @@ Add to Cloudflare Tunnel: `comics.glaance.io`
 
 Create directory: `mkdir -p /mnt/media/comics`
 
-### Homepage - Alternative Dashboard
-Modern alternative to Homarr with widgets:
+### Homepage
 
-```yaml
-homepage:
-  image: ghcr.io/gethomepage/homepage:latest
-  container_name: homepage
-  restart: unless-stopped
-  ports:
-    - "3003:3000"
-  environment:
-    <<: *common-env
-  volumes:
-    - ./data/homepage/config:/app/config
-    - /var/run/docker.sock:/var/run/docker.sock:ro
-```
-
-More customizable than Homarr, integrates with service APIs.
+Homepage is now the default dashboard, pre-configured with all services.
+See [Media Streaming](media-streaming.md#homepage) for configuration details.
 
 ## Storage & Performance
 
@@ -339,7 +325,7 @@ Things to avoid to keep your stack lean:
 ❌ **Plex** - You have Jellyfin (open-source, no paywalls)
 ❌ **Emby** - Same as Plex
 ❌ **Prometheus/Grafana** - Overkill for homelab unless you love metrics
-❌ **Multiple dashboards** - Pick one (Homarr or Homepage)
+❌ **Multiple dashboards** - Homepage is already included
 ❌ **Duplicate *arr apps** - One of each is enough
 
 ## Questions to Ask Before Adding

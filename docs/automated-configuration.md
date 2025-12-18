@@ -132,7 +132,7 @@ This will:
    - Add public hostnames for:
      - Jellyfin
      - Jellyseerr
-     - Homarr
+     - Homepage
 
 ## Environment Variables
 
@@ -145,8 +145,8 @@ PUID=1000
 PGID=1000
 MEDIA_ROOT=/mnt/media
 
-# Homarr (auto-generated encryption key)
-HOMARR_ENCRYPTION_KEY=<generated>
+# Homepage (auto-configured via YAML files)
+# No special env vars needed - see data/homepage/config/
 ```
 
 ### Required Variables (You Must Provide)

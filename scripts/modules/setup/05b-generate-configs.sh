@@ -65,7 +65,7 @@ generate_api_key() {
 # ============================================
 
 main() {
-    init_progress "Generate Service Configs" 5
+    init_progress "Generate Service Configs" 6
     local project_root
     project_root=$(get_project_root)
 
@@ -92,7 +92,7 @@ main() {
     # This avoids sync issues between pre-generated keys and actual container keys.
 
     # Step 1: Generate qBittorrent config
-    report_progress 1 5 "Generating qBittorrent config..."
+    report_progress 1 6 "Generating qBittorrent config..."
 
     local qbit_config_dir="$project_root/data/qbittorrent/config/qBittorrent"
     if [[ -d "$project_root/data/qbittorrent/config" ]]; then
@@ -121,10 +121,10 @@ EOF
         report_log "info" "qBittorrent will use default credentials initially"
     fi
 
-    report_progress 1 5 "qBittorrent config generated" "complete"
+    report_progress 1 6 "qBittorrent config generated" "complete"
 
     # Step 2: Generate SABnzbd config
-    report_progress 2 5 "Generating SABnzbd config..."
+    report_progress 2 6 "Generating SABnzbd config..."
 
     local sab_config_dir="$project_root/data/sabnzbd/config"
     local sab_config="$sab_config_dir/sabnzbd.ini"
@@ -185,10 +185,10 @@ EOF
         report_log "success" "Created SABnzbd config with credentials"
     fi
 
-    report_progress 2 5 "SABnzbd config generated" "complete"
+    report_progress 2 6 "SABnzbd config generated" "complete"
 
     # Step 3: Generate Bazarr config
-    report_progress 3 5 "Generating Bazarr config..."
+    report_progress 3 6 "Generating Bazarr config..."
 
     local bazarr_config_dir="$project_root/data/bazarr/config/config"
     if [[ -d "$project_root/data/bazarr/config" ]]; then
@@ -261,10 +261,10 @@ EOF
         fi
     fi
 
-    report_progress 3 5 "Bazarr config generated" "complete"
+    report_progress 3 6 "Bazarr config generated" "complete"
 
     # Step 4: Generate Tdarr config
-    report_progress 4 5 "Generating Tdarr config..."
+    report_progress 4 6 "Generating Tdarr config..."
 
     local tdarr_config_dir="$project_root/data/tdarr/configs"
     if [[ -d "$tdarr_config_dir" ]]; then
@@ -290,10 +290,10 @@ EOF
         fi
     fi
 
-    report_progress 4 5 "Tdarr config generated" "complete"
+    report_progress 4 6 "Tdarr config generated" "complete"
 
     # Step 5: Generate Jellyfin config
-    report_progress 5 5 "Generating Jellyfin config..."
+    report_progress 5 6 "Generating Jellyfin config..."
 
     local jellyfin_config_dir="$project_root/data/jellyfin/config"
     if [[ -d "$jellyfin_config_dir" ]]; then
@@ -363,7 +363,208 @@ EOF
         fi
     fi
 
-    report_progress 5 5 "Jellyfin config generated" "complete"
+    report_progress 5 6 "Jellyfin config generated" "complete"
+
+    # Step 6: Generate Homepage config
+    report_progress 6 6 "Generating Homepage dashboard config..."
+
+    local homepage_config_dir="$project_root/data/homepage/config"
+    if [[ -d "$homepage_config_dir" ]]; then
+        # Get server IP for service URLs
+        local server_ip
+        server_ip=$(hostname -I | awk '{print $1}')
+
+        # Generate settings.yaml (always regenerate - Homepage creates defaults)
+        if true; then
+            cat > "$homepage_config_dir/settings.yaml" << EOF
+title: ${server_name}
+theme: dark
+color: sky
+headerStyle: clean
+background:
+  image: https://images.unsplash.com/photo-1519681393784-d120267933ba?w=1920
+  blur: md
+  opacity: 30
+cardBlur: md
+iconStyle: theme
+layout:
+  Media:
+    style: row
+    columns: 2
+  Automation:
+    style: row
+    columns: 4
+  Downloads:
+    style: row
+    columns: 2
+  Processing:
+    style: row
+    columns: 2
+EOF
+            report_log "success" "Created Homepage settings.yaml"
+        fi
+
+        # Generate docker.yaml for container status
+        if [[ ! -f "$homepage_config_dir/docker.yaml" ]]; then
+            cat > "$homepage_config_dir/docker.yaml" << 'EOF'
+local:
+  socket: /var/run/docker.sock
+EOF
+            report_log "success" "Created Homepage docker.yaml"
+        fi
+
+        # Generate services.yaml with all homelab services
+        # Always regenerate to ensure our config (Homepage creates defaults on startup)
+        if true; then
+            cat > "$homepage_config_dir/services.yaml" << EOF
+- Media:
+    - Jellyfin:
+        icon: jellyfin.svg
+        href: http://${server_ip}:8096
+        description: Media streaming server
+        server: local
+        container: jellyfin
+        widget:
+          type: jellyfin
+          url: http://${server_ip}:8096
+          key: {{HOMEPAGE_VAR_JELLYFIN_API_KEY}}
+          enableBlocks: true
+          enableNowPlaying: true
+    - Jellyseerr:
+        icon: jellyseerr.svg
+        href: http://${server_ip}:5055
+        description: Media request management
+        server: local
+        container: jellyseerr
+        widget:
+          type: jellyseerr
+          url: http://${server_ip}:5055
+          key: {{HOMEPAGE_VAR_JELLYSEERR_API_KEY}}
+
+- Automation:
+    - Sonarr:
+        icon: sonarr.svg
+        href: http://${server_ip}:8989
+        description: TV show automation
+        server: local
+        container: sonarr
+        widget:
+          type: sonarr
+          url: http://${server_ip}:8989
+          key: {{HOMEPAGE_VAR_SONARR_API_KEY}}
+    - Radarr:
+        icon: radarr.svg
+        href: http://${server_ip}:7878
+        description: Movie automation
+        server: local
+        container: radarr
+        widget:
+          type: radarr
+          url: http://${server_ip}:7878
+          key: {{HOMEPAGE_VAR_RADARR_API_KEY}}
+    - Lidarr:
+        icon: lidarr.svg
+        href: http://${server_ip}:8686
+        description: Music automation
+        server: local
+        container: lidarr
+        widget:
+          type: lidarr
+          url: http://${server_ip}:8686
+          key: {{HOMEPAGE_VAR_LIDARR_API_KEY}}
+    - Prowlarr:
+        icon: prowlarr.svg
+        href: http://${server_ip}:9696
+        description: Indexer management
+        server: local
+        container: prowlarr
+        widget:
+          type: prowlarr
+          url: http://${server_ip}:9696
+          key: {{HOMEPAGE_VAR_PROWLARR_API_KEY}}
+    - Bazarr:
+        icon: bazarr.svg
+        href: http://${server_ip}:6767
+        description: Subtitle automation
+        server: local
+        container: bazarr
+        widget:
+          type: bazarr
+          url: http://${server_ip}:6767
+          key: {{HOMEPAGE_VAR_BAZARR_API_KEY}}
+
+- Downloads:
+    - qBittorrent:
+        icon: qbittorrent.svg
+        href: http://${server_ip}:8080
+        description: Torrent client
+        server: local
+        container: qbittorrent
+        widget:
+          type: qbittorrent
+          url: http://${server_ip}:8080
+          username: {{HOMEPAGE_VAR_QBIT_USER}}
+          password: {{HOMEPAGE_VAR_QBIT_PASS}}
+    - SABnzbd:
+        icon: sabnzbd.svg
+        href: http://${server_ip}:8085
+        description: Usenet client
+        server: local
+        container: sabnzbd
+        widget:
+          type: sabnzbd
+          url: http://${server_ip}:8085
+          key: {{HOMEPAGE_VAR_SABNZBD_API_KEY}}
+
+- Processing:
+    - Tdarr:
+        icon: tdarr.svg
+        href: http://${server_ip}:8265
+        description: Media transcoding
+        server: local
+        container: tdarr
+        widget:
+          type: tdarr
+          url: http://${server_ip}:8265
+    - ARM:
+        icon: sh-automatic-ripping-machine
+        href: http://${server_ip}:8090
+        description: Disc ripping
+        server: local
+        container: arm
+EOF
+            report_log "success" "Created Homepage services.yaml"
+        fi
+
+        # Generate bookmarks.yaml (empty but required)
+        if [[ ! -f "$homepage_config_dir/bookmarks.yaml" ]]; then
+            cat > "$homepage_config_dir/bookmarks.yaml" << 'EOF'
+# Add bookmarks here if desired
+# Example:
+# - Developer:
+#     - GitHub:
+#         - icon: github.svg
+#           href: https://github.com/
+EOF
+            report_log "success" "Created Homepage bookmarks.yaml"
+        fi
+
+        # Generate widgets.yaml for info widgets
+        if [[ ! -f "$homepage_config_dir/widgets.yaml" ]]; then
+            cat > "$homepage_config_dir/widgets.yaml" << 'EOF'
+- resources:
+    cpu: true
+    memory: true
+    disk: /
+- search:
+    provider: duckduckgo
+    target: _blank
+EOF
+            report_log "success" "Created Homepage widgets.yaml"
+        fi
+    fi
+
+    report_progress 6 6 "Homepage config generated" "complete"
 
     finish_progress "complete" "Service configs generated"
 }

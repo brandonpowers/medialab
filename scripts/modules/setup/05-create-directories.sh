@@ -39,7 +39,7 @@ main() {
     report_progress 1 3 "Creating service data directories..."
 
     local dirs=(
-        "data/homarr/appdata"
+        "data/homepage/config"
         "data/jellyfin/config"
         "data/jellyfin/cache"
         "data/jellyseerr/config"

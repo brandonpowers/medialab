@@ -847,29 +847,8 @@ generate_env() {
         print_info "Using existing EMAIL=$EMAIL"
     fi
 
-    # --- Homarr Encryption Key ---
-    local existing_homarr=$(get_env_value "HOMARR_ENCRYPTION_KEY")
-    if [ -z "$existing_homarr" ]; then
-        HOMARR_ENCRYPTION_KEY=$(openssl rand -hex 32)
-        set_env_value "HOMARR_ENCRYPTION_KEY" "$HOMARR_ENCRYPTION_KEY"
-        print_success "Generated new HOMARR_ENCRYPTION_KEY"
-
-        # Save to passwords file
-        cat > .passwords.txt << EOF
-HOMELAB PASSWORDS - $(date)
-KEEP THIS FILE SECURE!
-
-Homarr Encryption Key: ${HOMARR_ENCRYPTION_KEY}
-
-These passwords have been added to .env
-Consider storing them in a password manager and deleting this file.
-EOF
-        chmod 600 .passwords.txt
-        print_warning "New passwords saved to .passwords.txt"
-    else
-        HOMARR_ENCRYPTION_KEY="$existing_homarr"
-        print_info "Using existing HOMARR_ENCRYPTION_KEY"
-    fi
+    # Note: Homepage dashboard doesn't require encryption keys
+    # It uses file-based YAML configuration that's generated during setup
 
     # --- API Keys ---
 
@@ -990,7 +969,7 @@ create_directories() {
     local pgid=${PGID:-1000}
 
     local dirs=(
-        "data/homarr/appdata"
+        "data/homepage/config"
         "data/jellyfin/config"
         "data/jellyfin/cache"
         "data/jellyseerr/config"
@@ -1256,14 +1235,14 @@ show_access_info() {
 
     if [ "$cf_configured" = true ] && [ -n "$domain" ]; then
         echo -e "${GREEN}Public Services (via Cloudflare Tunnel):${NC}"
-        echo "  Homarr:         https://homarr.${domain}"
+        echo "  Homepage:       https://home.${domain}"
         echo "  Jellyfin:       https://jellyfin.${domain}"
         echo "  Jellyseerr:     https://jellyseerr.${domain}"
         echo ""
     fi
 
     echo -e "${BLUE}All Services (LAN: ${lan_ip}):${NC}"
-    echo "  Homarr:         http://${lan_ip}:7575"
+    echo "  Homepage:       http://${lan_ip}:3000"
     echo "  Jellyfin:       http://${lan_ip}:8096"
     echo "  Jellyseerr:     http://${lan_ip}:5055"
     echo "  Sonarr:         http://${lan_ip}:8989"

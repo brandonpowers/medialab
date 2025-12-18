@@ -1814,12 +1814,10 @@ if [ -z "$(grep "^NEWSHOSTING_USER=" "$PROJECT_ROOT/.env" 2>/dev/null | cut -d'=
 fi
 print_warning "⚠ Jellyfin: Complete initial setup at http://localhost:8096"
 print_warning "⚠ Jellyseerr: Link to Jellyfin at http://localhost:5055"
-print_warning "⚠ Homarr: Complete initial setup at http://localhost:7575"
 
 echo ""
-print_info "Once Homarr initial setup is complete, run:"
-print_info "  ./scripts/configure-homarr.sh"
-print_info "to automatically add all services to your dashboard."
+print_success "Homepage dashboard: http://localhost:3000"
+print_info "Dashboard is pre-configured with all services."
 
 echo ""
 print_success "Your homelab is ready to use!"

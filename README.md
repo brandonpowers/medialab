@@ -70,7 +70,7 @@ sudo ./scripts/homelab all
 - Syncs TRaSH Guides via Recyclarr
 - Sets up Tdarr transcoding libraries
 - Configures ARM for disc ripping
-- Adds all services to Homarr dashboard
+- Pre-configures Homepage dashboard with all services
 
 **Total time:** ~20-30 minutes (mostly downloading Docker images)
 
@@ -93,7 +93,7 @@ For detailed information about automated configuration, see **[Automated Configu
 ## Service Documentation
 
 ### Media Services
-- **[Media Streaming](docs/media-streaming.md)** - Jellyfin, Jellyseerr, Homarr
+- **[Media Streaming](docs/media-streaming.md)** - Jellyfin, Jellyseerr, Homepage dashboard
 
 ### Automation & Downloads
 - **[Media Automation](docs/media-automation.md)** - Sonarr, Radarr, Lidarr, Prowlarr, Bazarr, Recyclarr
@@ -135,7 +135,7 @@ For detailed information about automated configuration, see **[Automated Configu
   |  |     Docker Compose Services         |  |
   |  |                                     |  |
   |  |  PUBLIC (via Cloudflare):           |  |
-  |  |    Jellyfin, Jellyseerr, Homarr     |  |
+  |  |    Jellyfin, Jellyseerr, Homepage   |  |
   |  |                                     |  |
   |  |  PRIVATE (LAN only):                |  |
   |  |    *arr apps, Downloads, Tdarr, ARM |  |
@@ -155,7 +155,7 @@ For detailed information about automated configuration, see **[Automated Configu
 ### Public Services (via Cloudflare Tunnel)
 Accessible from anywhere with **home IP hidden**:
 
-- **Dashboard** - https://homarr.yourdomain.com
+- **Dashboard** - https://home.yourdomain.com
 - **Jellyfin** - https://jellyfin.yourdomain.com
 - **Jellyseerr** - https://jellyseerr.yourdomain.com
 
@@ -179,7 +179,7 @@ Access from your local network:
 | Service | Purpose | Port |
 |---------|---------|------|
 | **Cloudflared** | Secure tunnel for public access | - |
-| **Homarr** | Dashboard for all services | 7575 |
+| **Homepage** | Dashboard for all services | 3000 |
 | **Jellyfin** | Media streaming server | 8096 |
 | **Jellyseerr** | Media request management | 5055 |
 | **Sonarr** | TV show automation | 8989 |

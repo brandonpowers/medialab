@@ -226,7 +226,7 @@ All services should show "Up" status.
 **Public Services** (via Cloudflare Tunnel - after configuration):
 - Jellyfin: https://jellyfin.yourdomain.com
 - Jellyseerr: https://jellyseerr.yourdomain.com
-- Homarr: https://homarr.yourdomain.com
+- Homepage: https://home.yourdomain.com
 
 **Private Services** (LAN only):
 - Sonarr: http://SERVER_IP:8989

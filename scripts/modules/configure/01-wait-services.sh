@@ -131,6 +131,44 @@ main() {
         fi
     fi
 
+    # Sync Jellyseerr key (JSON config format)
+    local jellyseerr_config="$project_root/data/jellyseerr/config/settings.json"
+    if [[ -f "$jellyseerr_config" ]]; then
+        local jellyseerr_key
+        jellyseerr_key=$(jq -r '.main.apiKey // empty' "$jellyseerr_config" 2>/dev/null || true)
+        if [[ -n "$jellyseerr_key" ]]; then
+            local current_key
+            current_key=$(get_env_value "JELLYSEERR_API_KEY" "$project_root/.env")
+            if [[ "$jellyseerr_key" != "$current_key" ]]; then
+                set_env_value "JELLYSEERR_API_KEY" "$jellyseerr_key" "true" "$project_root/.env"
+                export JELLYSEERR_API_KEY="$jellyseerr_key"
+                report_log "info" "Synced Jellyseerr API key"
+            fi
+        fi
+    fi
+
+    # Generate Jellyfin API key (access token for Homepage widget)
+    local jellyfin_key
+    jellyfin_key=$(get_env_value "JELLYFIN_API_KEY" "$project_root/.env")
+    if [[ -z "$jellyfin_key" ]]; then
+        local admin_user admin_pass
+        admin_user=$(get_env_value "ADMIN_USERNAME" "$project_root/.env")
+        admin_pass=$(get_env_value "ADMIN_PASSWORD" "$project_root/.env")
+        if [[ -n "$admin_user" && -n "$admin_pass" ]]; then
+            local auth_response
+            auth_response=$(curl -s -X POST "http://localhost:8096/Users/AuthenticateByName" \
+                -H "Content-Type: application/json" \
+                -H "X-Emby-Authorization: MediaBrowser Client=\"Homelab\", Device=\"Homepage\", DeviceId=\"homepage-widget\", Version=\"1.0\"" \
+                -d "{\"Username\": \"${admin_user}\", \"Pw\": \"${admin_pass}\"}" 2>/dev/null || true)
+            jellyfin_key=$(echo "$auth_response" | jq -r '.AccessToken // empty' 2>/dev/null || true)
+            if [[ -n "$jellyfin_key" ]]; then
+                set_env_value "JELLYFIN_API_KEY" "$jellyfin_key" "true" "$project_root/.env"
+                export JELLYFIN_API_KEY="$jellyfin_key"
+                report_log "info" "Generated Jellyfin API key"
+            fi
+        fi
+    fi
+
     report_log "success" "API keys synchronized from container configs"
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

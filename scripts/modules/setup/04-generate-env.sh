@@ -178,6 +178,19 @@ main() {
     set_env_value "PGID" "$pgid" "false" "$env_file" || true
     report_log "success" "User: $puid:$pgid"
 
+    # Docker group GID (for Homepage container to access docker.sock)
+    local docker_gid
+    docker_gid=$(get_env_value "DOCKER_GID" "$env_file")
+    if [[ -z "$docker_gid" ]]; then
+        docker_gid=$(getent group docker 2>/dev/null | cut -d: -f3 || echo "")
+    fi
+    if [[ -n "$docker_gid" ]]; then
+        set_env_value "DOCKER_GID" "$docker_gid" "false" "$env_file" || true
+        report_log "success" "Docker GID: $docker_gid"
+    else
+        report_log "warning" "Docker group not found - Homepage container status may not work"
+    fi
+
     report_progress 2 7 "System settings configured" "complete"
 
     # Step 3: Media root
@@ -202,27 +215,9 @@ main() {
     # Step 4: Security keys
     report_progress 4 7 "Generating security keys..."
 
-    # Homarr encryption key
-    local homarr_key
-    homarr_key=$(get_env_value "HOMARR_ENCRYPTION_KEY" "$env_file")
-    if [[ -z "$homarr_key" ]]; then
-        homarr_key=$(openssl rand -hex 32)
-        set_env_value "HOMARR_ENCRYPTION_KEY" "$homarr_key" "false" "$env_file" || true
-        report_log "success" "Generated HOMARR_ENCRYPTION_KEY"
-
-        # Save to passwords file
-        cat > "$project_root/.passwords.txt" << EOF
-HOMELAB PASSWORDS - $(date)
-KEEP THIS FILE SECURE!
-
-Homarr Encryption Key: ${homarr_key}
-
-These passwords have been added to .env
-Consider storing them in a password manager and deleting this file.
-EOF
-        chmod 600 "$project_root/.passwords.txt"
-        report_log "warning" "Passwords saved to .passwords.txt"
-    fi
+    # Note: Homepage dashboard doesn't require encryption keys
+    # It uses file-based YAML configuration
+    report_log "success" "Security configuration ready"
 
     report_progress 4 7 "Security keys ready" "complete"
 
@@ -248,6 +243,15 @@ EOF
     set_env_value "SONARR_API_KEY" "your_sonarr_api_key_here" "false" "$env_file" || true
     set_env_value "RADARR_API_KEY" "your_radarr_api_key_here" "false" "$env_file" || true
     set_env_value "SABNZBD_API_KEY" "" "false" "$env_file" || true
+
+    # Tdarr API key for automated auth (must start with tapi_, 14+ chars, alphanumeric + underscore)
+    local tdarr_api_key
+    tdarr_api_key=$(get_env_value "TDARR_API_KEY" "$env_file")
+    if [[ -z "$tdarr_api_key" || "$tdarr_api_key" == "your_tdarr_api_key_here" ]]; then
+        # Generate a seeded API key: tapi_ + 16 random alphanumeric characters
+        tdarr_api_key="tapi_$(openssl rand -hex 8)"
+    fi
+    set_env_value "TDARR_API_KEY" "$tdarr_api_key" "false" "$env_file" || true
 
     # Usenet provider settings (optional)
     local usenet_enabled usenet_host usenet_port usenet_user usenet_pass usenet_connections usenet_ssl

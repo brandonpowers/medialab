@@ -49,18 +49,32 @@ services:
   # (Accessible via Cloudflare Tunnel)
   # ============================================
 
-  homarr:
-    image: ghcr.io/homarr-labs/homarr:latest
-    container_name: homarr
+  homepage:
+    image: ghcr.io/gethomepage/homepage:latest
+    container_name: homepage
     restart: unless-stopped
     ports:
-      - "7575:7575"
+      - "3000:3000"
+    user: "${PUID}:${PGID}"
+    group_add:
+      - "${DOCKER_GID}"  # docker group for socket access
     environment:
-      SECRET_ENCRYPTION_KEY: ${HOMARR_ENCRYPTION_KEY}
+      TZ: ${TZ}
+      HOMEPAGE_ALLOWED_HOSTS: "*"
+      # API keys for service widgets (substituted into config via {{HOMEPAGE_VAR_*}})
+      HOMEPAGE_VAR_JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
+      HOMEPAGE_VAR_JELLYSEERR_API_KEY: ${JELLYSEERR_API_KEY:-}
+      HOMEPAGE_VAR_SONARR_API_KEY: ${SONARR_API_KEY:-}
+      HOMEPAGE_VAR_RADARR_API_KEY: ${RADARR_API_KEY:-}
+      HOMEPAGE_VAR_LIDARR_API_KEY: ${LIDARR_API_KEY:-}
+      HOMEPAGE_VAR_PROWLARR_API_KEY: ${PROWLARR_API_KEY:-}
+      HOMEPAGE_VAR_BAZARR_API_KEY: ${BAZARR_API_KEY:-}
+      HOMEPAGE_VAR_SABNZBD_API_KEY: ${SABNZBD_API_KEY:-}
+      HOMEPAGE_VAR_QBIT_USER: ${QBIT_USER:-admin}
+      HOMEPAGE_VAR_QBIT_PASS: ${QBIT_PASS:-}
     volumes:
-      - ./data/homarr/appdata:/appdata
-      # SECURITY: Docker socket removed - prevents container escape attacks
-      # Container status feature disabled; use 'docker ps' to check status
+      - ./data/homepage/config:/app/config
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     <<: *default-security
     logging: *default-logging
 
@@ -264,6 +278,12 @@ services:
       webUIPort: 8265
       internalNode: "true"
       nodeName: HomeLabNode
+      # Authentication - seededApiKey pre-creates an API key for automated deployments
+      # Note: First user must still be created via web UI, but API access works with this key
+      serverAuth: "true"
+      seededApiKey: ${TDARR_API_KEY:-}
+      # Internal node uses same API key to connect to server
+      apiKey: ${TDARR_API_KEY:-}
     devices:
       - /dev/dri:/dev/dri
     volumes:

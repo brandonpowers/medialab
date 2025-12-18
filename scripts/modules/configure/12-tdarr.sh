@@ -62,6 +62,36 @@ main() {
     # Give Tdarr a moment to fully initialize its database
     sleep 3
 
+    # Get Tdarr API key for authenticated requests
+    local tdarr_api_key="${TDARR_API_KEY:-}"
+    if [[ -n "$tdarr_api_key" ]]; then
+        report_log "success" "Using Tdarr API key for authentication"
+    fi
+
+    # Build curl arguments array for Tdarr API calls
+    local -a tdarr_curl_auth=()
+    if [[ -n "$tdarr_api_key" ]]; then
+        tdarr_curl_auth=(-H "x-api-key: ${tdarr_api_key}")
+    fi
+
+    # Helper function to make Tdarr API calls with optional auth
+    tdarr_api() {
+        local method="$1"
+        local endpoint="$2"
+        local data="${3:-}"
+
+        if [[ -n "$data" ]]; then
+            curl -s -X "$method" "http://localhost:8265${endpoint}" \
+                -H "Content-Type: application/json" \
+                "${tdarr_curl_auth[@]}" \
+                -d "$data" 2>/dev/null || echo "{}"
+        else
+            curl -s -X "$method" "http://localhost:8265${endpoint}" \
+                -H "Content-Type: application/json" \
+                "${tdarr_curl_auth[@]}" 2>/dev/null || echo "{}"
+        fi
+    }
+
     # Get API keys for notifications
     local sonarr_key="${SONARR_API_KEY:-$(get_api_key sonarr)}"
     local radarr_key="${RADARR_API_KEY:-$(get_api_key radarr)}"
@@ -75,9 +105,7 @@ main() {
 
     # Check existing flows
     local existing_flows
-    existing_flows=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
-        -H "Content-Type: application/json" \
-        -d '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}' 2>/dev/null || echo "{}")
+    existing_flows=$(tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}')
 
     local flow_name="h265-${gpu_type}-transcode"
     local flow_id=""
@@ -139,16 +167,12 @@ except: pass
 }
 EOF
 )
-        curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
-            -H "Content-Type: application/json" \
-            -d "$flow_body" > /dev/null 2>&1
+        tdarr_api POST "/api/v2/cruddb" "$flow_body" > /dev/null 2>&1
 
         # Verify the flow was actually created by querying again
         sleep 1
         local verify_flows
-        verify_flows=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
-            -H "Content-Type: application/json" \
-            -d '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}' 2>/dev/null || echo "{}")
+        verify_flows=$(tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}')
 
         if echo "$verify_flows" | grep -qE "\"name\":[[:space:]]*\"${flow_name}\""; then
             # Get the actual flow ID that was created
@@ -172,9 +196,7 @@ except: pass
 
     # Create libraries
     local existing_libraries
-    existing_libraries=$(curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
-        -H "Content-Type: application/json" \
-        -d '{"data": {"collection":"LibrarySettingsJSONDB","mode":"getAll"}}' 2>/dev/null || echo "{}")
+    existing_libraries=$(tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"LibrarySettingsJSONDB","mode":"getAll"}}')
 
     local tdarr_schedule
     tdarr_schedule=$(generate_tdarr_schedule)
@@ -212,9 +234,7 @@ except: pass
 }
 EOF
 )
-        curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
-            -H "Content-Type: application/json" \
-            -d "$library_body" > /dev/null 2>&1 && \
+        tdarr_api POST "/api/v2/cruddb" "$library_body" > /dev/null 2>&1 && \
             report_log "success" "Movies library created" || report_log "warning" "Could not create Movies library"
     else
         print_info "Tdarr Movies library already exists"
@@ -253,9 +273,7 @@ EOF
 }
 EOF
 )
-        curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
-            -H "Content-Type: application/json" \
-            -d "$tv_library_body" > /dev/null 2>&1 && \
+        tdarr_api POST "/api/v2/cruddb" "$tv_library_body" > /dev/null 2>&1 && \
             report_log "success" "TV Shows library created" || report_log "warning" "Could not create TV Shows library"
     else
         print_info "Tdarr TV Shows library already exists"
@@ -265,29 +283,33 @@ EOF
     print_info "Configuring Tdarr node worker limits..."
     sleep 3
 
-    curl -s -X POST "http://localhost:8265/api/v2/cruddb" \
-        -H "Content-Type: application/json" \
-        -d '{
-            "data": {
-                "collection": "NodeJSONDB",
-                "mode": "update",
-                "docID": "HomeLabNode",
-                "obj": {
-                    "workerLimits": {
-                        "healthcheckcpu": 0,
-                        "healthcheckgpu": 1,
-                        "transcodecpu": 0,
-                        "transcodegpu": 2
-                    },
-                    "nodePaused": false
-                }
+    local node_config='{
+        "data": {
+            "collection": "NodeJSONDB",
+            "mode": "update",
+            "docID": "HomeLabNode",
+            "obj": {
+                "workerLimits": {
+                    "healthcheckcpu": 0,
+                    "healthcheckgpu": 1,
+                    "transcodecpu": 0,
+                    "transcodegpu": 2
+                },
+                "nodePaused": false
             }
-        }' > /dev/null 2>&1 && \
+        }
+    }'
+    tdarr_api POST "/api/v2/cruddb" "$node_config" > /dev/null 2>&1 && \
         report_log "success" "Node workers configured (2 GPU transcode, 1 GPU healthcheck)" || \
         report_log "warning" "Could not configure node workers"
 
     report_log "success" "Tdarr fully configured with H.265 ${gpu_name} flow and GPU workers"
-    report_log "info" "To enable auth: visit http://localhost:8265 and create an admin account"
+    if [[ -n "$tdarr_api_key" ]]; then
+        report_log "info" "Auth enabled - create admin user at http://localhost:8265"
+        report_log "info" "API key for integrations: $tdarr_api_key"
+    else
+        report_log "info" "To enable auth: visit http://localhost:8265 and create an admin account"
+    fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
     finish_progress "complete" "$MODULE_NAME"

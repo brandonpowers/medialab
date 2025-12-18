@@ -5,7 +5,7 @@ This stack uses a **privacy-first architecture** with Cloudflare Tunnel to provi
 ## Overview
 
 **Access model:**
-- **Public services** (Jellyfin, Jellyseerr, Homarr) → Cloudflare Tunnel (remote access)
+- **Public services** (Jellyfin, Jellyseerr, Homepage) → Cloudflare Tunnel (remote access)
 - **Admin services** (Sonarr, Radarr, etc.) → LAN only (local network)
 
 ## Cloudflare Tunnel
@@ -78,12 +78,12 @@ Cloudflare Tunnel creates an outbound-only connection from your server to Cloudf
 
 Now you'll route your subdomains to services. Add these public hostnames:
 
-**1. Homarr (Dashboard)**
+**1. Homepage (Dashboard)**
 ```
-Public hostname: homarr.yourdomain.com
+Public hostname: home.yourdomain.com
 Service:
   Type: HTTP
-  URL: homarr:7575
+  URL: homepage:3000
 ```
 
 **2. Jellyfin (Media Server)**
@@ -153,12 +153,12 @@ Click "Save tunnel" after adding all routes.
 ```bash
 # Test each subdomain
 curl -I https://jellyfin.yourdomain.com
-curl -I https://homarr.yourdomain.com
+curl -I https://home.yourdomain.com
 curl -I https://jellyseerr.yourdomain.com
 ```
 
 Or just open in browser:
-- https://homarr.yourdomain.com - Should show your dashboard
+- https://home.yourdomain.com - Should show your dashboard
 - https://jellyfin.yourdomain.com - Should show Jellyfin login
 
 **Check SSL Certificate:**
@@ -256,7 +256,7 @@ docker compose restart cloudflared
   |  |     Docker Compose Services          |  |
   |  |                                      |  |
   |  |  PUBLIC (via Cloudflare):            |  |
-  |  |    Jellyfin, Jellyseerr, Homarr      |  |
+  |  |    Jellyfin, Jellyseerr, Homepage    |  |
   |  |                                      |  |
   |  |  PRIVATE (LAN only):                 |  |
   |  |    *arr apps, Downloads, Tdarr, ARM  |  |

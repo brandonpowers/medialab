@@ -8,7 +8,7 @@ Services for streaming and managing your media library.
 |---------|---------|--------|------|
 | **Jellyfin** | Media server for movies, TV, and music | Public (Cloudflare) | 8096 |
 | **Jellyseerr** | Media request and discovery platform | Public (Cloudflare) | 5055 |
-| **Homarr** | Unified dashboard for all services | Public (Cloudflare) | 7575 |
+| **Homepage** | Unified dashboard for all services | Public (Cloudflare) | 3000 |
 
 ## Jellyfin
 
@@ -206,112 +206,81 @@ docker compose exec radarr cat /config/config.xml | grep ApiKey
 
 ---
 
-## Homarr
+## Homepage
 
-Unified dashboard providing quick access to all your services.
+Unified dashboard providing quick access to all your services with live status widgets.
 
 ### Features
-- Customizable layout with drag-and-drop widgets
-- Service status monitoring
-- Docker container integration
-- Quick links to all services
-- Weather widget
-- Calendar integration
-- Custom backgrounds and themes
+- Pre-configured during setup with all services
+- Live service widgets showing real-time data
+- Docker container status monitoring
+- System resource monitoring (CPU, RAM, disk)
+- Customizable YAML configuration
+- Dark theme by default
 
-### Initial Setup
+### Accessing Homepage
 
-1. **Access Homarr:**
-   - Public: https://homarr.yourdomain.com
-   - Local: http://SERVER_IP:7575
+- **Public**: https://home.yourdomain.com
+- **Local**: http://SERVER_IP:3000
 
-2. **First Time Setup:**
-   - Create admin account
-   - Choose dashboard layout
-   - Select theme (light/dark)
+### Configuration
 
-3. **Automated App Setup (Recommended):**
+Homepage is **pre-configured automatically** during setup. All services are added with:
+- Service icons
+- API integration for live data
+- Docker container status
+- Health monitoring
 
-   After initial setup, run the automation script:
-   ```bash
-   ./scripts/configure-homarr.sh
-   ```
-
-   This will:
-   - Prompt you to create an API key
-   - Automatically add all homelab services as apps
-   - Configure service icons and ping URLs
-
-   **Manual App Setup (Alternative):**
-
-   Go to **Management** → **Apps** → **New app**
-
-   Add each service:
-   - **Name**: Service name (e.g., "Jellyfin")
-   - **URL**: Service URL (e.g., http://SERVER_IP:8096)
-   - **Icon**: Choose from 10K+ built-in icons
-   - **Description**: Service description
-
-4. **Docker Integration (Disabled for Security):**
-
-   The Docker socket is **not mounted** to prevent container escape attacks.
-   Container status monitoring is disabled; use `docker ps` to check status.
-
-   All other Homarr features work normally without Docker socket access.
-
-5. **Add Widgets:**
-
-   Common widgets to add:
-   - **Weather**: Local weather information
-   - **Calendar**: Show calendar events from *arr apps
-   - **System Stats**: CPU, RAM, disk usage
-   - **Service Status**: Up/down status of services
+Configuration files are in `data/homepage/config/`:
+- `settings.yaml` - Theme and layout
+- `services.yaml` - Service widgets
+- `docker.yaml` - Container monitoring
+- `widgets.yaml` - Info widgets
+- `bookmarks.yaml` - Quick links
 
 ### Customization
 
-**Layout:**
-- Drag and drop widgets to rearrange
-- Resize widgets by dragging corners
-- Create multiple dashboards for different purposes
+**Edit services.yaml** to customize widgets:
+```yaml
+- Media:
+    - Jellyfin:
+        icon: jellyfin.svg
+        href: http://SERVER_IP:8096
+        widget:
+          type: jellyfin
+          url: http://SERVER_IP:8096
+          key: your-api-key
+```
 
-**Themes:**
-- Settings → Appearance
-- Choose from pre-built themes
-- Customize colors and background
-- Upload custom background image
+**Restart after changes:**
+```bash
+docker compose restart homepage
+```
 
-**Quick Actions:**
-- Add common actions to dashboard
-- Restart containers
-- Run scripts
-- Open multiple services at once
+### Service Widgets
 
-### Integration with Services
-
-Homarr can integrate with service APIs:
-
-- **Sonarr/Radarr**: Show upcoming releases
-- **Jellyfin**: Recently added content
-- **qBittorrent**: Download status
+Homepage shows live data from:
+- **Jellyfin**: Now playing, library stats
+- **Sonarr/Radarr**: Queue, wanted items
+- **qBittorrent**: Download/seed status
+- **SABnzbd**: Download queue
 - **Tdarr**: Transcoding progress
-
-Configure in Settings → Integrations
 
 ### Troubleshooting
 
 **Services not showing status:**
 ```bash
-# Verify Docker socket permissions
-docker compose logs homarr
+# Check Homepage logs
+docker compose logs homepage
 
-# Check service URLs are correct
-# Use internal Docker names (e.g., http://jellyfin:8096)
+# Verify API keys in docker-compose.yml environment
+# Check services.yaml for correct URLs
 ```
 
-**Can't access Homarr:**
+**Can't access Homepage:**
 - Check Cloudflare Tunnel configuration
-- Verify service is running: `docker compose ps homarr`
-- Check logs: `docker compose logs homarr`
+- Verify service is running: `docker compose ps homepage`
+- Check logs: `docker compose logs homepage`
 
 ---
 
@@ -328,12 +297,12 @@ docker compose logs homarr
 7. User receives notification in Jellyseerr
 8. Content available to stream in Jellyfin
 
-### Homarr Dashboard Integration
+### Homepage Dashboard Integration
 
-Homarr provides:
+Homepage provides:
 - One-click access to all services
-- Status monitoring
-- Recent activity from all services
+- Live service widgets with API data
+- Docker container status
 - Unified dashboard for family/friends
 
 ---
@@ -356,13 +325,13 @@ Homarr provides:
 4. **Regular quota checks** - Monitor user requests
 5. **Link with Overseerr** - Can migrate from Overseerr if needed
 
-### Homarr
+### Homepage
 
-1. **Organize services by category** - Easier to navigate
-2. **Use Docker integration** - Monitor container health
-3. **Add calendar widgets** - See upcoming releases
-4. **Customize for users** - Create different views for admin/users
-5. **Regular backups** - Backup dashboard configuration
+1. **Organize services by category** - Edit services.yaml groups
+2. **Use Docker integration** - Monitor container health via docker.yaml
+3. **Add info widgets** - Edit widgets.yaml for system stats
+4. **Customize theme** - Edit settings.yaml for colors/layout
+5. **Backup config** - Backup data/homepage/config/ directory
 
 ---
 
@@ -384,12 +353,12 @@ Send notifications to Discord/Slack:
 3. Configure notification types
 4. Test webhook
 
-### Homarr Custom CSS
+### Homepage Custom Styling
 
-Add custom styling:
-1. Settings → Customization → Custom CSS
-2. Add CSS rules
-3. Save and refresh
+Add custom CSS/JS:
+1. Create `custom.css` or `custom.js` in config directory
+2. Styles are automatically loaded
+3. Restart container to apply
 
 ---
 
@@ -407,11 +376,11 @@ Add custom styling:
 - Uses SQLite database (built-in)
 - Database is stored in container config volume
 
-### Homarr
+### Homepage
 
-- Minimize active widgets to reduce resource usage
-- Use local icons instead of remote URLs
-- Enable caching in settings
+- Lightweight and fast by design
+- Uses built-in icon set (no external requests)
+- Caches API responses automatically
 
 ---
 
@@ -421,6 +390,6 @@ Add custom styling:
 |---------|-----------|---------|
 | Jellyfin | https://jellyfin.yourdomain.com | http://SERVER_IP:8096 |
 | Jellyseerr | https://jellyseerr.yourdomain.com | http://SERVER_IP:5055 |
-| Homarr | https://homarr.yourdomain.com | http://SERVER_IP:7575 |
+| Homepage | https://home.yourdomain.com | http://SERVER_IP:3000 |
 
 All services accessible on your local network or remotely via Cloudflare Tunnel.

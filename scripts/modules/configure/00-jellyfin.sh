@@ -88,19 +88,6 @@ main() {
 
     report_log "success" "Jellyfin is responding"
 
-    # Wait for Startup API to be fully ready (needs extra time after basic API is up)
-    report_log "info" "Waiting for Jellyfin startup API..."
-    waited=0
-    while ! curl -s "${JELLYFIN_URL}/Startup/User" \
-        -H "X-Emby-Authorization: MediaBrowser Client=\"Homelab\", Device=\"Setup\", DeviceId=\"setup\", Version=\"1.0\"" 2>/dev/null | grep -q "Name"; do
-        sleep 2
-        waited=$((waited + 2))
-        if [[ $waited -ge 30 ]]; then
-            report_log "warning" "Jellyfin startup API not ready - may need manual setup"
-            break
-        fi
-    done
-
     # Check if we have password
     if [[ -z "$admin_pass" ]]; then
         report_log "warning" "No admin password configured - Jellyfin requires manual setup"
@@ -110,11 +97,48 @@ main() {
         return 0
     fi
 
-    # Check if wizard is already complete
+    # Check if wizard is already complete first (skip waiting for startup API if so)
     if check_wizard_complete; then
         report_log "warning" "Jellyfin wizard already completed - cannot auto-configure"
         report_log "info" "To reconfigure, run: docker compose down && sudo rm -rf data/jellyfin/config/* && docker compose up -d"
         report_log "info" "Then run: ./homelab configure"
+        report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
+        finish_progress "complete" "$MODULE_NAME"
+        return 0
+    fi
+
+    # Wait for Startup API to be fully ready (needs extra time after basic API is up)
+    # On fresh installs, Jellyfin takes time to initialize the startup wizard
+    report_log "info" "Waiting for Jellyfin startup wizard API..."
+    waited=0
+    local startup_api_ready=false
+    while [[ $waited -lt 60 ]]; do
+        # Check if startup API is available
+        local startup_response
+        startup_response=$(curl -s "${JELLYFIN_URL}/Startup/User" \
+            -H "X-Emby-Authorization: MediaBrowser Client=\"Homelab\", Device=\"Setup\", DeviceId=\"setup\", Version=\"1.0\"" 2>/dev/null || echo "")
+
+        if echo "$startup_response" | grep -q "Name"; then
+            startup_api_ready=true
+            report_log "success" "Startup wizard API is ready"
+            break
+        fi
+
+        # Check if wizard completed while waiting (race condition)
+        if check_wizard_complete; then
+            report_log "warning" "Jellyfin wizard completed while waiting - cannot auto-configure"
+            report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
+            finish_progress "complete" "$MODULE_NAME"
+            return 0
+        fi
+
+        sleep 2
+        waited=$((waited + 2))
+    done
+
+    if [[ "$startup_api_ready" != "true" ]]; then
+        report_log "warning" "Jellyfin startup wizard API not available after 60s"
+        report_log "info" "Complete setup manually at: ${JELLYFIN_URL}"
         report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
         finish_progress "complete" "$MODULE_NAME"
         return 0
