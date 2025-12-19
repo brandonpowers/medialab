@@ -48,7 +48,7 @@ main() {
     # Display detected drives
     local drive_count=0
     for drive in $optical_drives; do
-        ((drive_count++))
+        drive_count=$((drive_count + 1))
         local drive_info
         drive_info=$(get_optical_drive_info "$drive")
         local sg_device

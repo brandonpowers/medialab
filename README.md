@@ -9,8 +9,8 @@ A complete, privacy-first media server stack running on Ubuntu Server 24.04 LTS.
 - Privacy-first remote access (Cloudflare Tunnel - optional)
 - Complete automation (*arr stack with TRaSH Guides integration)
 - Dual download methods (Usenet + Torrents)
-- Automated transcoding (Tdarr with GPU acceleration)
 - Blu-ray/DVD ripping (ARM - Automatic Ripping Machine)
+- Automated transcoding (Tdarr with GPU acceleration)
 
 ## Quick Start
 

@@ -1,1 +1,1 @@
-/home/brandon/repos/homelab/scripts/cgi/progress.cgi
+/opt/homelab/scripts/cgi/progress.cgi

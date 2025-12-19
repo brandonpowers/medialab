@@ -74,7 +74,7 @@ main() {
     for file in "${config_files[@]}"; do
         if [[ ! -f "$config_dir/$file" ]]; then
             report_log "warning" "Missing config file: $file"
-            ((missing++))
+            missing=$((missing + 1))
         fi
     done
 

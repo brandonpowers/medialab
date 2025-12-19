@@ -1,1 +1,1 @@
-/home/brandon/repos/homelab/scripts/cgi/run-module.cgi
+/opt/homelab/scripts/cgi/run-module.cgi

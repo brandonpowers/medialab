@@ -2,7 +2,4 @@
 # This file disables optional services using Docker Compose profiles
 # Services with profiles won't start unless explicitly enabled
 
-services:
-  # Cloudflare Tunnel - disabled (not configured)
-  cloudflared:
-    profiles: ["cloudflare"]
+services: {}

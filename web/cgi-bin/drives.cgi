@@ -1,1 +1,1 @@
-/home/brandon/repos/homelab/scripts/cgi/drives.cgi
+/opt/homelab/scripts/cgi/drives.cgi

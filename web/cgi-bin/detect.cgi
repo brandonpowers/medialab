@@ -1,1 +1,1 @@
-/home/brandon/repos/homelab/scripts/cgi/detect.cgi
+/opt/homelab/scripts/cgi/detect.cgi
