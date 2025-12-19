@@ -23,7 +23,7 @@ declare -A services=(
   ["Radarr"]="http://localhost:7878/ping"
   ["Lidarr"]="http://localhost:8686/ping"
   ["Prowlarr"]="http://localhost:9696/ping"
-  ["Homarr"]="http://localhost:7575"
+  ["Homepage"]="http://localhost:3000"
   ["Jellyseerr"]="http://localhost:5055"
 )
 
