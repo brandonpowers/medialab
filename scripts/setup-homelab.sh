@@ -576,6 +576,8 @@ mount_partition() {
 # Create media directory structure
 create_media_structure() {
     local media_path="$1"
+    local puid=${PUID:-1000}
+    local pgid=${PGID:-1000}
 
     print_info "Creating media directory structure..."
 
@@ -600,7 +602,21 @@ create_media_structure() {
     done
 
     # Set ownership
-    chown -R ${PUID:-1000}:${PGID:-1000} "$media_path"
+    chown -R ${puid}:${pgid} "$media_path"
+
+    # Set default ACLs on media directories so new files are accessible by PUID
+    # This ensures ARM/MakeMKV files (created as root) are writable by Tdarr
+    if command -v setfacl &> /dev/null; then
+        print_info "Setting default ACLs for media directories..."
+        setfacl -R -d -m u:${puid}:rwx "$media_path/movies" 2>/dev/null && \
+            print_success "ACL set on movies directory"
+        setfacl -R -d -m u:${puid}:rwx "$media_path/tv" 2>/dev/null && \
+            print_success "ACL set on tv directory"
+    else
+        print_warning "setfacl not found - install 'acl' package for automatic permission handling"
+        print_info "Run: sudo apt install acl"
+    fi
+
     print_success "Media directory structure ready"
 }
 
@@ -621,8 +637,8 @@ install_docker() {
     # Update package index
     apt-get update -qq
 
-    # Install prerequisites
-    apt-get install -y ca-certificates curl jq &>/dev/null
+    # Install prerequisites (acl needed for media directory permissions)
+    apt-get install -y ca-certificates curl jq acl &>/dev/null
     install -m 0755 -d /etc/apt/keyrings
 
     # Add Docker's official GPG key
@@ -1116,6 +1132,9 @@ setup_cron_jobs() {
         cron_updated=true
         print_success "Tdarr temp cleanup scheduled: removes orphaned files older than 1 day"
     fi
+
+    # NOTE: Media file ownership is handled by default ACLs on movies/tv directories
+    # (set in create_media_structure) - no cron job needed
 
     if [ "$cron_updated" = true ]; then
         print_success "Cron jobs configured"

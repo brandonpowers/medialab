@@ -1177,8 +1177,8 @@ async function loadServiceStatus() {
         </div>
     `).join('');
 
-    // Initialize configure module list
-    if (configModuleList) {
+    // Initialize configure module list (only if not already complete)
+    if (configModuleList && !configurationComplete) {
         configModuleList.innerHTML = configureModules.map(m => `
             <div class="module-item" id="config-module-${m.id}">
                 <div class="module-status pending">○</div>

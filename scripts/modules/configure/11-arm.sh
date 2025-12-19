@@ -88,6 +88,19 @@ main() {
         report_log "success" "RIPMETHOD_BR set to backup (better for protected Blu-rays)"
     fi
 
+    # Configure file permissions (enables group write access for processed files)
+    # NOTE: SET_MEDIA_OWNER/CHOWN settings exist in ARM config but are NOT implemented in ARM code
+    # File ownership is handled by default ACLs on media directories (set in create_media_structure)
+    if grep -q 'SET_MEDIA_PERMISSIONS: false' "$arm_config"; then
+        sed -i 's|SET_MEDIA_PERMISSIONS: false|SET_MEDIA_PERMISSIONS: true|' "$arm_config"
+        report_log "success" "SET_MEDIA_PERMISSIONS enabled"
+    fi
+
+    if grep -q 'CHMOD_VALUE: 777' "$arm_config"; then
+        sed -i 's|CHMOD_VALUE: 777|CHMOD_VALUE: 775|' "$arm_config"
+        report_log "success" "CHMOD_VALUE set to 775 (group writable)"
+    fi
+
     # Configure ARM web UI authentication
     local admin_user="${ADMIN_USERNAME:-admin}"
     local admin_pass="${ADMIN_PASSWORD:-}"

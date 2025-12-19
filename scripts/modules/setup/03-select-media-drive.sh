@@ -111,6 +111,17 @@ create_media_structure() {
     puid=$(get_env_value "PUID" || echo "1000")
     pgid=$(get_env_value "PGID" || echo "1000")
     chown -R "${puid}:${pgid}" "$media_path"
+
+    # Set default ACLs on media directories so new files are accessible by PUID
+    # This ensures ARM/MakeMKV files (created as root) are writable by Tdarr
+    if command -v setfacl &> /dev/null; then
+        report_log "info" "Setting default ACLs for media directories..."
+        setfacl -R -d -m u:${puid}:rwx "$media_path/movies" 2>/dev/null || true
+        setfacl -R -d -m u:${puid}:rwx "$media_path/tv" 2>/dev/null || true
+        report_log "success" "Default ACLs configured for movies and tv directories"
+    else
+        report_log "warning" "setfacl not found - install 'acl' package for automatic permission handling"
+    fi
 }
 
 # Format drive with single ext4 partition

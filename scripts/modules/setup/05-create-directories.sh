@@ -25,7 +25,7 @@ done
 # ============================================
 
 main() {
-    init_progress "Create Directories" 3
+    init_progress "Create Directories" 4
     local project_root
     project_root=$(get_project_root)
 
@@ -34,9 +34,10 @@ main() {
 
     local puid=${PUID:-1000}
     local pgid=${PGID:-1000}
+    local media_root="${MEDIA_ROOT:-/mnt/media}"
 
     # Step 1: Create service directories
-    report_progress 1 3 "Creating service data directories..."
+    report_progress 1 4 "Creating service data directories..."
 
     local dirs=(
         "data/homepage/config"
@@ -76,10 +77,10 @@ main() {
     done
 
     report_log "success" "Created $created directories ($existed already existed)"
-    report_progress 1 3 "Service directories ready" "complete"
+    report_progress 1 4 "Service directories ready" "complete"
 
     # Step 2: Set ownership
-    report_progress 2 3 "Setting directory ownership (${puid}:${pgid})..."
+    report_progress 2 4 "Setting directory ownership (${puid}:${pgid})..."
 
     # Set ownership on all data directories
     # This ensures containers can write to their config directories
@@ -105,10 +106,10 @@ main() {
         chmod 664 "$project_root/data/arm/config/arm.yaml" 2>/dev/null || true
     fi
 
-    report_progress 2 3 "Ownership configured" "complete"
+    report_progress 2 4 "Ownership configured" "complete"
 
     # Step 3: Copy config files if needed
-    report_progress 3 3 "Copying configuration files..."
+    report_progress 3 4 "Copying configuration files..."
 
     # Copy recyclarr.yml if it doesn't exist
     if [[ -f "$project_root/config/recyclarr.yml" ]]; then
@@ -118,7 +119,30 @@ main() {
         fi
     fi
 
-    report_progress 3 3 "Configuration files ready" "complete"
+    report_progress 3 4 "Configuration files ready" "complete"
+
+    # Step 4: Set default ACLs on media directories
+    # This ensures ARM/MakeMKV files (created as root) are accessible by Tdarr
+    report_progress 4 4 "Setting media directory ACLs..."
+
+    if command -v setfacl &> /dev/null; then
+        local acl_set=false
+        if [[ -d "$media_root/movies" ]]; then
+            setfacl -R -d -m u:${puid}:rwx "$media_root/movies" 2>/dev/null && acl_set=true
+        fi
+        if [[ -d "$media_root/tv" ]]; then
+            setfacl -R -d -m u:${puid}:rwx "$media_root/tv" 2>/dev/null && acl_set=true
+        fi
+        if [[ "$acl_set" == "true" ]]; then
+            report_log "success" "Default ACLs set on media directories"
+        else
+            report_log "info" "Media directories not found - ACLs will be set when storage is configured"
+        fi
+        report_progress 4 4 "Media ACLs configured" "complete"
+    else
+        report_log "warning" "setfacl not found - install 'acl' package for automatic permission handling"
+        report_progress 4 4 "ACL tools not available" "warning"
+    fi
 
     finish_progress "complete" "All directories created"
 

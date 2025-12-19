@@ -25,65 +25,79 @@ done
 # ============================================
 
 main() {
-    init_progress "Check Prerequisites" 4
+    init_progress "Check Prerequisites" 5
 
     # Step 1: Check directory
-    report_progress 1 4 "Checking working directory..."
+    report_progress 1 5 "Checking working directory..."
     local project_root
     project_root=$(get_project_root)
 
     if [[ ! -f "$project_root/docker-compose.yml" ]]; then
-        report_progress 1 4 "docker-compose.yml not found" "error"
+        report_progress 1 5 "docker-compose.yml not found" "error"
         finish_progress "error" "Please run from the homelab directory"
         exit 1
     fi
-    report_progress 1 4 "Working directory OK" "complete"
+    report_progress 1 5 "Working directory OK" "complete"
 
     # Step 2: Check Docker
-    report_progress 2 4 "Checking Docker installation..."
+    report_progress 2 5 "Checking Docker installation..."
     if command_exists docker; then
         local docker_version
         docker_version=$(docker --version 2>/dev/null || echo "unknown")
-        report_progress 2 4 "Docker installed: $docker_version" "complete"
+        report_progress 2 5 "Docker installed: $docker_version" "complete"
 
         # Configure Docker daemon even if already installed
         if [[ $EUID -eq 0 ]]; then
             configure_docker_daemon
         fi
     else
-        report_progress 2 4 "Docker not found - installing..." "running"
+        report_progress 2 5 "Docker not found - installing..." "running"
         if [[ $EUID -ne 0 ]]; then
-            report_progress 2 4 "Root required to install Docker" "error"
+            report_progress 2 5 "Root required to install Docker" "error"
             finish_progress "error" "Run with sudo to install Docker"
             exit 1
         fi
         install_docker
-        report_progress 2 4 "Docker installed" "complete"
+        report_progress 2 5 "Docker installed" "complete"
     fi
 
     # Step 3: Check Docker Compose
-    report_progress 3 4 "Checking Docker Compose..."
+    report_progress 3 5 "Checking Docker Compose..."
     if docker compose version &>/dev/null; then
         local compose_version
         compose_version=$(docker compose version 2>/dev/null || echo "unknown")
-        report_progress 3 4 "Docker Compose: $compose_version" "complete"
+        report_progress 3 5 "Docker Compose: $compose_version" "complete"
     else
-        report_progress 3 4 "Docker Compose not available" "error"
+        report_progress 3 5 "Docker Compose not available" "error"
         finish_progress "error" "Docker Compose is required"
         exit 1
     fi
 
     # Step 4: Check OpenSSL
-    report_progress 4 4 "Checking OpenSSL..."
+    report_progress 4 5 "Checking OpenSSL..."
     if command_exists openssl; then
-        report_progress 4 4 "OpenSSL installed" "complete"
+        report_progress 4 5 "OpenSSL installed" "complete"
     else
-        report_progress 4 4 "Installing OpenSSL..." "running"
+        report_progress 4 5 "Installing OpenSSL..." "running"
         if [[ $EUID -eq 0 ]]; then
             apt-get install -y openssl &>/dev/null
-            report_progress 4 4 "OpenSSL installed" "complete"
+            report_progress 4 5 "OpenSSL installed" "complete"
         else
-            report_progress 4 4 "OpenSSL not found (install with apt)" "warning"
+            report_progress 4 5 "OpenSSL not found (install with apt)" "warning"
+        fi
+    fi
+
+    # Step 5: Check ACL tools (required for media directory permissions)
+    report_progress 5 5 "Checking ACL tools..."
+    if command_exists setfacl; then
+        report_progress 5 5 "ACL tools installed" "complete"
+    else
+        report_progress 5 5 "Installing ACL tools..." "running"
+        if [[ $EUID -eq 0 ]]; then
+            apt-get install -y acl &>/dev/null
+            report_progress 5 5 "ACL tools installed" "complete"
+        else
+            report_progress 5 5 "ACL tools not found (install with: sudo apt install acl)" "warning"
         fi
     fi
 

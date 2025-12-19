@@ -58,8 +58,8 @@ install_docker() {
     # Update package index
     apt-get update -qq
 
-    # Install prerequisites
-    apt-get install -y ca-certificates curl jq &>/dev/null
+    # Install prerequisites (acl needed for media directory permissions)
+    apt-get install -y ca-certificates curl jq acl &>/dev/null
     install -m 0755 -d /etc/apt/keyrings
 
     # Add Docker's official GPG key
@@ -153,7 +153,7 @@ pull_images_with_progress() {
     # Pull each service's image
     while IFS= read -r service; do
         [[ -z "$service" ]] && continue
-        ((current++))
+        current=$((current + 1))
 
         report_progress "$current" "$total" "Pulling $service..." "running"
 
