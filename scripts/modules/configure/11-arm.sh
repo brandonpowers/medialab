@@ -101,6 +101,23 @@ main() {
         report_log "success" "CHMOD_VALUE set to 775 (group writable)"
     fi
 
+    # Configure BASH_SCRIPT for post-rip ownership fix
+    # This script runs after each rip to fix root-owned files and clean up empty directories
+    local fix_script="/etc/arm/config/arm-fix-ownership.sh"
+    if grep -q 'BASH_SCRIPT: ""' "$arm_config"; then
+        sed -i "s|BASH_SCRIPT: \"\"|BASH_SCRIPT: \"${fix_script}\"|" "$arm_config"
+        report_log "success" "BASH_SCRIPT configured for post-rip ownership fix"
+    fi
+
+    # Ensure the fix-ownership script exists in ARM config
+    local source_script="${project_root}/scripts/utilities/arm-fix-ownership.sh"
+    local dest_script="${project_root}/data/arm/config/arm-fix-ownership.sh"
+    if [[ -f "$source_script" ]] && [[ ! -f "$dest_script" ]]; then
+        cp "$source_script" "$dest_script"
+        chmod +x "$dest_script"
+        report_log "success" "Copied arm-fix-ownership.sh to ARM config"
+    fi
+
     # Configure ARM web UI authentication
     local admin_user="${ADMIN_USERNAME:-admin}"
     local admin_pass="${ADMIN_PASSWORD:-}"

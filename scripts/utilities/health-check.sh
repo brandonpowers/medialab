@@ -25,6 +25,7 @@ declare -A services=(
   ["Prowlarr"]="http://localhost:9696/ping"
   ["Homepage"]="http://localhost:3000"
   ["Jellyseerr"]="http://localhost:5055"
+  ["ARM"]="http://localhost:8090"
 )
 
 all_healthy=true
