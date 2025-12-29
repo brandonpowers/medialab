@@ -264,6 +264,7 @@ Homepage shows live data from:
 - **Sonarr/Radarr**: Queue, wanted items
 - **qBittorrent**: Download/seed status
 - **SABnzbd**: Download queue
+- **ARM**: Current disc ripping progress and status
 - **Tdarr**: Transcoding progress
 
 ### Troubleshooting

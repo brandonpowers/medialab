@@ -121,20 +121,41 @@ main() {
 
     report_progress 3 4 "Configuration files ready" "complete"
 
-    # Step 4: Set default ACLs on media directories
-    # This ensures ARM/MakeMKV files (created as root) are accessible by Tdarr
-    report_progress 4 4 "Setting media directory ACLs..."
+    # Step 4: Set comprehensive ACLs on ALL media directories
+    # This ensures files created by any process (ARM, Tdarr, etc.) automatically get correct permissions
+    report_progress 4 4 "Setting comprehensive media directory ACLs..."
 
     if command -v setfacl &> /dev/null; then
         local acl_set=false
-        if [[ -d "$media_root/movies" ]]; then
-            setfacl -R -d -m u:${puid}:rwx "$media_root/movies" 2>/dev/null && acl_set=true
-        fi
-        if [[ -d "$media_root/tv" ]]; then
-            setfacl -R -d -m u:${puid}:rwx "$media_root/tv" 2>/dev/null && acl_set=true
-        fi
+        local acl_dirs=(
+            "$media_root"
+            "$media_root/movies"
+            "$media_root/tv"
+            "$media_root/music"
+            "$media_root/downloads"
+            "$media_root/downloads/complete"
+            "$media_root/downloads/incomplete"
+            "$media_root/downloads/watch"
+            "$media_root/transcode"
+            "$media_root/arm"
+        )
+
+        for dir in "${acl_dirs[@]}"; do
+            if [[ -d "$dir" ]]; then
+                # Set current ACLs (for existing files)
+                setfacl -R -m "u:${puid}:rwx" "$dir" 2>/dev/null && acl_set=true
+                setfacl -R -m "g:${pgid}:rwx" "$dir" 2>/dev/null || true
+
+                # Set default ACLs (for future files) - ensures inheritance!
+                setfacl -R -d -m "u:${puid}:rwx" "$dir" 2>/dev/null || true
+                setfacl -R -d -m "g:${pgid}:rwx" "$dir" 2>/dev/null || true
+                setfacl -R -d -m "mask::rwx" "$dir" 2>/dev/null || true
+            fi
+        done
+
         if [[ "$acl_set" == "true" ]]; then
-            report_log "success" "Default ACLs set on media directories"
+            report_log "success" "Comprehensive ACLs set on all media directories"
+            report_log "info" "New files/directories will automatically inherit correct permissions"
         else
             report_log "info" "Media directories not found - ACLs will be set when storage is configured"
         fi

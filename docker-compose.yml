@@ -92,7 +92,7 @@ services:
     volumes:
       - ./data/jellyfin/config:/config
       - ./data/jellyfin/cache:/cache
-      - ${MEDIA_ROOT}:/media:ro  # Read-only to prevent accidental deletion
+      - ${MEDIA_ROOT}:/media  # Read-write access to allow deletion from Jellyfin UI
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8096/health"]
       interval: 60s

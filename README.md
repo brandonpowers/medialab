@@ -58,6 +58,7 @@ sudo ./scripts/homelab all
 - Installs Docker and Docker Compose
 - Detects GPU and optical drives
 - Configures storage and media directories
+- Sets comprehensive ACLs for automatic permission inheritance
 - Generates `.env` with secure passwords
 - Sets up ARM udev rules for disc detection
 - Pulls Docker images and starts services
@@ -79,7 +80,7 @@ sudo ./scripts/homelab all
 For a guided setup experience, use the web-based wizard:
 
 ```bash
-./scripts/serve-ui.sh
+./scripts/run-ui.sh
 ```
 
 Then open http://localhost:8000 in your browser. The wizard walks you through:

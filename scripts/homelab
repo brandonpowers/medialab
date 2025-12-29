@@ -5,7 +5,7 @@
 #
 # Usage:
 #   ./scripts/homelab setup              Run setup phase
-#   ./scripts/homelab configure          Run configure phase (includes Homarr)
+#   ./scripts/homelab configure          Run configure phase (includes Homepage)
 #   ./scripts/homelab all                Run setup and configure phases
 #   ./scripts/homelab status             Show service status
 #   ./scripts/homelab --help             Show help
@@ -40,7 +40,7 @@ USAGE:
 COMMANDS:
     start           Launch the web UI setup wizard
     setup           Run initial setup (Docker, storage, environment)
-    configure       Configure services via API (includes Homarr dashboard)
+    configure       Configure services via API (includes Homepage dashboard)
     all             Run setup and configure phases
     status          Show service status
 
@@ -68,7 +68,7 @@ show_version() {
 # ============================================
 
 run_start() {
-    exec "$HOMELAB_SCRIPT_DIR/serve-ui.sh"
+    exec "$HOMELAB_SCRIPT_DIR/run-ui.sh"
 }
 
 run_setup() {
@@ -86,6 +86,7 @@ run_setup() {
         "03-select-media-drive.sh"
         "04-generate-env.sh"
         "05-create-directories.sh"
+        "05b-generate-homepage-config.sh"
         "06-setup-arm-udev.sh"
         "07-pull-images.sh"
         "08-start-services.sh"
@@ -173,16 +174,8 @@ run_configure() {
         print_info "  Succeeded: $succeeded modules"
         [[ $failed -gt 0 ]] && print_warning "  Failed: $failed modules (may need manual configuration)"
     else
-        # Fall back to original configure-services.sh
-        print_info "Running configure-services.sh..."
-        if [[ -f "$HOMELAB_SCRIPT_DIR/configure-services.sh" ]]; then
-            bash "$HOMELAB_SCRIPT_DIR/configure-services.sh"
-        else
-            print_error "No configure modules found"
-            exit 1
-        fi
-        echo ""
-        print_success "Configure phase complete!"
+        print_error "No configure modules found in $module_dir"
+        exit 1
     fi
 }
 

@@ -112,13 +112,40 @@ create_media_structure() {
     pgid=$(get_env_value "PGID" || echo "1000")
     chown -R "${puid}:${pgid}" "$media_path"
 
-    # Set default ACLs on media directories so new files are accessible by PUID
-    # This ensures ARM/MakeMKV files (created as root) are writable by Tdarr
+    # Set comprehensive ACLs on ALL media directories
+    # This ensures files created by any process (ARM, Tdarr, etc.) are accessible by PUID/PGID
     if command -v setfacl &> /dev/null; then
-        report_log "info" "Setting default ACLs for media directories..."
-        setfacl -R -d -m u:${puid}:rwx "$media_path/movies" 2>/dev/null || true
-        setfacl -R -d -m u:${puid}:rwx "$media_path/tv" 2>/dev/null || true
-        report_log "success" "Default ACLs configured for movies and tv directories"
+        report_log "info" "Setting comprehensive ACLs for all media directories..."
+
+        # Set ACLs on root media path and all subdirectories
+        local acl_dirs=(
+            "$media_path"
+            "$media_path/movies"
+            "$media_path/tv"
+            "$media_path/music"
+            "$media_path/downloads"
+            "$media_path/downloads/complete"
+            "$media_path/downloads/incomplete"
+            "$media_path/downloads/watch"
+            "$media_path/transcode"
+            "$media_path/arm"
+        )
+
+        for dir in "${acl_dirs[@]}"; do
+            if [ -d "$dir" ]; then
+                # Set current ACLs (for existing files)
+                setfacl -R -m "u:${puid}:rwx" "$dir" 2>/dev/null || true
+                setfacl -R -m "g:${pgid}:rwx" "$dir" 2>/dev/null || true
+
+                # Set default ACLs (for future files) - THIS IS KEY!
+                setfacl -R -d -m "u:${puid}:rwx" "$dir" 2>/dev/null || true
+                setfacl -R -d -m "g:${pgid}:rwx" "$dir" 2>/dev/null || true
+                setfacl -R -d -m "mask::rwx" "$dir" 2>/dev/null || true
+            fi
+        done
+
+        report_log "success" "Comprehensive ACLs configured on all media directories"
+        report_log "info" "New files will automatically inherit correct permissions"
     else
         report_log "warning" "setfacl not found - install 'acl' package for automatic permission handling"
     fi
