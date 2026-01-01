@@ -4,7 +4,7 @@ This guide explains how to use the automated configuration script to link all se
 
 ## What Gets Automated
 
-The `configure-services.sh` script automates the following:
+The `./scripts/homelab configure` command automates the following:
 
 ### ✅ Automatically Configured
 
@@ -53,7 +53,7 @@ First, deploy your homelab stack:
 
 ```bash
 cd /opt/homelab
-./scripts/setup-homelab.sh
+./scripts/homelab setup
 ```
 
 This will:
@@ -77,7 +77,7 @@ docker compose ps
 
 ```bash
 cd /opt/homelab
-./scripts/configure-services.sh
+./scripts/homelab configure
 ```
 
 This will:
@@ -111,7 +111,7 @@ This will:
    - Complete initial wizard
    - Add your Usenet provider servers
    - Copy API key to `.env` as `SABNZBD_API_KEY`
-   - Re-run: `./scripts/configure-services.sh`
+   - Re-run: `./scripts/homelab configure`
 
 4. **Jellyfin - Initial Setup**
    - URL: `http://SERVER_IP:8096`
@@ -172,7 +172,7 @@ SABNZBD_API_KEY=<manual>
 
 ## Verification
 
-After running `configure-services.sh`, verify everything is linked:
+After running `./scripts/homelab configure`, verify everything is linked:
 
 ### Check Prowlarr
 
@@ -214,7 +214,7 @@ docker compose ps
 docker compose restart sonarr radarr lidarr
 
 # Wait 2-3 minutes and try again
-./scripts/configure-services.sh
+./scripts/homelab configure
 ```
 
 ### Download Client Connection Failed
@@ -271,14 +271,14 @@ The script is idempotent - safe to run multiple times. It will:
 
 ```bash
 # Safe to re-run anytime
-./scripts/configure-services.sh
+./scripts/homelab configure
 ```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    configure-services.sh                    │
+│                   homelab configure                         │
 └─────────────────────────────────────────────────────────────┘
                              │
     ┌────────────────────────┼────────────────────────┐

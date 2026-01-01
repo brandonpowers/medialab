@@ -52,6 +52,55 @@ main() {
     # Add root folder
     add_root_folder "http://localhost:8989" "$api_key" "/media/tv"
 
+    # Create 4K Preferred quality profile
+    # This profile prefers 4K but accepts 1080p as fallback for content not available in 4K
+    print_info "Creating 4K Preferred quality profile..."
+    local schema formats items profile_body
+    schema=$(api_get "http://localhost:8989/api/v3/qualityprofile/schema" "$api_key" 2>/dev/null)
+    if [[ -n "$schema" ]]; then
+        # Get format items and modify quality items to enable 1080p and 4K
+        formats=$(echo "$schema" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('formatItems', [])))" 2>/dev/null)
+        items=$(echo "$schema" | python3 -c "
+import sys,json
+schema = json.load(sys.stdin)
+items = schema.get('items', [])
+# Enable 1080p and 4K qualities
+for item in items:
+    q = item.get('quality', {})
+    qid = q.get('id', 0)
+    # Enable 1080p: HDTV-1080p(9), Bluray-1080p(7), Bluray-1080p Remux(20)
+    # Enable 4K: HDTV-2160p(16), Bluray-2160p(19), Bluray-2160p Remux(21)
+    if qid in [9, 7, 20, 16, 19, 21]:
+        item['allowed'] = True
+    elif item.get('id') in [1002, 1003]:  # WEB 1080p/2160p groups
+        item['allowed'] = True
+        for sub in item.get('items', []):
+            sub['allowed'] = True
+    else:
+        item['allowed'] = False
+        for sub in item.get('items', []):
+            sub['allowed'] = False
+print(json.dumps(items))
+" 2>/dev/null)
+        profile_body=$(cat <<EOF
+{
+  "name": "4K Preferred",
+  "upgradeAllowed": true,
+  "cutoff": 21,
+  "minUpgradeFormatScore": 1,
+  "cutoffFormatScore": 0,
+  "minFormatScore": 0,
+  "items": ${items},
+  "formatItems": ${formats}
+}
+EOF
+)
+        api_post "http://localhost:8989/api/v3/qualityprofile" "$profile_body" "$api_key" > /dev/null 2>&1 && \
+            report_log "success" "4K Preferred quality profile created" || report_log "info" "4K Preferred profile may already exist"
+    else
+        report_log "warning" "Could not get quality schema - skipping 4K profile creation"
+    fi
+
     # Determine qBittorrent priority
     local qbit_priority=1
     if [[ -n "${SABNZBD_API_KEY:-}" ]]; then
@@ -119,6 +168,21 @@ EOF
 )
         api_post "http://localhost:8989/api/v3/downloadclient" "$sabnzbd_body" "$api_key" > /dev/null 2>&1 && \
             report_log "success" "SABnzbd added" || report_log "info" "SABnzbd may already exist"
+
+        # Add remote path mapping for SABnzbd downloads
+        # SABnzbd uses /downloads internally, but Sonarr sees it as /media/downloads
+        print_info "Adding SABnzbd remote path mapping..."
+        local pathmapping_body
+        pathmapping_body=$(cat <<EOF
+{
+    "host": "sabnzbd",
+    "remotePath": "/downloads/",
+    "localPath": "/media/downloads/"
+}
+EOF
+)
+        api_post "http://localhost:8989/api/v3/remotepathmapping" "$pathmapping_body" "$api_key" > /dev/null 2>&1 && \
+            report_log "success" "SABnzbd path mapping added" || report_log "info" "Path mapping may already exist"
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

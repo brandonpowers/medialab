@@ -84,16 +84,42 @@ main() {
         fi
     fi
 
-    # In interactive mode, prompt for credentials
-    if [[ -z "$cookie_file" && "$OUTPUT_MODE" != "json" ]]; then
-        print_info "Could not auto-login. Enter credentials manually:"
-        read -p "qBittorrent username [admin]: " input_user
-        qbit_user=${input_user:-admin}
-        read -s -p "qBittorrent password: " qbit_pass
-        echo ""
+    # If all login attempts failed, reset the password
+    if [[ -z "$cookie_file" ]]; then
+        report_log "info" "All login attempts failed - resetting qBittorrent password..."
 
-        if [[ -n "$qbit_pass" ]]; then
-            cookie_file=$(qbittorrent_login "$qbit_user" "$qbit_pass")
+        local config_file
+        config_file="$(get_project_root)/data/qbittorrent/config/qBittorrent/qBittorrent.conf"
+
+        if [[ -f "$config_file" ]]; then
+            # Stop qBittorrent
+            docker compose stop qbittorrent > /dev/null 2>&1 || true
+
+            # Remove password line from config (forces temp password generation)
+            sed -i '/WebUI\\Password_PBKDF2/d' "$config_file"
+
+            # Also set the username to admin user
+            if grep -q "WebUI\\\\Username=" "$config_file"; then
+                sed -i "s/WebUI\\\\Username=.*/WebUI\\\\Username=$admin_user/" "$config_file"
+            fi
+
+            # Restart qBittorrent
+            docker compose up -d qbittorrent > /dev/null 2>&1 || true
+            sleep 5
+
+            # Get new temp password
+            local temp_pass
+            temp_pass=$(docker compose logs qbittorrent 2>/dev/null | grep -oP 'temporary password is provided for this session: \K\S+' | tail -1 || true)
+
+            if [[ -n "$temp_pass" ]]; then
+                report_log "info" "Got new temporary password, logging in..."
+                cookie_file=$(qbittorrent_login "$admin_user" "$temp_pass")
+                if [[ -n "$cookie_file" ]]; then
+                    qbit_user="$admin_user"
+                    qbit_pass="$temp_pass"
+                    report_log "success" "Password reset successful"
+                fi
+            fi
         fi
     fi
 

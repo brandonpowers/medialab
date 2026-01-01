@@ -52,6 +52,71 @@ main() {
     # Add root folder
     add_root_folder "http://localhost:7878" "$api_key" "/media/movies"
 
+    # Create 4K Preferred quality profile
+    # This profile prefers 4K but accepts 1080p as fallback for content not available in 4K
+    print_info "Creating 4K Preferred quality profile..."
+    local schema formats profile_body
+    schema=$(api_get "http://localhost:7878/api/v3/qualityprofile/schema" "$api_key" 2>/dev/null)
+    if [[ -n "$schema" ]]; then
+        formats=$(echo "$schema" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('formatItems', [])))" 2>/dev/null)
+        profile_body=$(cat <<EOF
+{
+  "name": "4K Preferred",
+  "upgradeAllowed": true,
+  "cutoff": 31,
+  "minUpgradeFormatScore": 1,
+  "cutoffFormatScore": 0,
+  "minFormatScore": 0,
+  "items": [
+    {"quality": {"id": 0, "name": "Unknown"}, "items": [], "allowed": false},
+    {"quality": {"id": 24, "name": "WORKPRINT"}, "items": [], "allowed": false},
+    {"quality": {"id": 25, "name": "CAM"}, "items": [], "allowed": false},
+    {"quality": {"id": 26, "name": "TELESYNC"}, "items": [], "allowed": false},
+    {"quality": {"id": 27, "name": "TELECINE"}, "items": [], "allowed": false},
+    {"quality": {"id": 29, "name": "REGIONAL"}, "items": [], "allowed": false},
+    {"quality": {"id": 28, "name": "DVDSCR"}, "items": [], "allowed": false},
+    {"quality": {"id": 1, "name": "SDTV"}, "items": [], "allowed": false},
+    {"quality": {"id": 2, "name": "DVD"}, "items": [], "allowed": false},
+    {"quality": {"id": 23, "name": "DVD-R"}, "items": [], "allowed": false},
+    {"id": 1000, "name": "WEB 480p", "items": [
+      {"quality": {"id": 8, "name": "WEBDL-480p"}, "items": [], "allowed": false},
+      {"quality": {"id": 12, "name": "WEBRip-480p"}, "items": [], "allowed": false}
+    ], "allowed": false},
+    {"quality": {"id": 20, "name": "Bluray-480p"}, "items": [], "allowed": false},
+    {"quality": {"id": 21, "name": "Bluray-576p"}, "items": [], "allowed": false},
+    {"quality": {"id": 4, "name": "HDTV-720p"}, "items": [], "allowed": false},
+    {"id": 1001, "name": "WEB 720p", "items": [
+      {"quality": {"id": 5, "name": "WEBDL-720p"}, "items": [], "allowed": false},
+      {"quality": {"id": 14, "name": "WEBRip-720p"}, "items": [], "allowed": false}
+    ], "allowed": false},
+    {"quality": {"id": 6, "name": "Bluray-720p"}, "items": [], "allowed": false},
+    {"quality": {"id": 9, "name": "HDTV-1080p"}, "items": [], "allowed": true},
+    {"id": 1002, "name": "WEB 1080p", "items": [
+      {"quality": {"id": 3, "name": "WEBDL-1080p"}, "items": [], "allowed": true},
+      {"quality": {"id": 15, "name": "WEBRip-1080p"}, "items": [], "allowed": true}
+    ], "allowed": true},
+    {"quality": {"id": 7, "name": "Bluray-1080p"}, "items": [], "allowed": true},
+    {"quality": {"id": 30, "name": "Remux-1080p"}, "items": [], "allowed": true},
+    {"quality": {"id": 16, "name": "HDTV-2160p"}, "items": [], "allowed": true},
+    {"id": 1003, "name": "WEB 2160p", "items": [
+      {"quality": {"id": 18, "name": "WEBDL-2160p"}, "items": [], "allowed": true},
+      {"quality": {"id": 17, "name": "WEBRip-2160p"}, "items": [], "allowed": true}
+    ], "allowed": true},
+    {"quality": {"id": 19, "name": "Bluray-2160p"}, "items": [], "allowed": true},
+    {"quality": {"id": 31, "name": "Remux-2160p"}, "items": [], "allowed": true},
+    {"quality": {"id": 22, "name": "BR-DISK"}, "items": [], "allowed": false},
+    {"quality": {"id": 10, "name": "Raw-HD"}, "items": [], "allowed": false}
+  ],
+  "formatItems": ${formats}
+}
+EOF
+)
+        api_post "http://localhost:7878/api/v3/qualityprofile" "$profile_body" "$api_key" > /dev/null 2>&1 && \
+            report_log "success" "4K Preferred quality profile created" || report_log "info" "4K Preferred profile may already exist"
+    else
+        report_log "warning" "Could not get quality schema - skipping 4K profile creation"
+    fi
+
     # Determine qBittorrent priority
     local qbit_priority=1
     if [[ -n "${SABNZBD_API_KEY:-}" ]]; then
@@ -119,6 +184,21 @@ EOF
 )
         api_post "http://localhost:7878/api/v3/downloadclient" "$sabnzbd_body" "$api_key" > /dev/null 2>&1 && \
             report_log "success" "SABnzbd added" || report_log "info" "SABnzbd may already exist"
+
+        # Add remote path mapping for SABnzbd downloads
+        # SABnzbd uses /downloads internally, but Radarr sees it as /media/downloads
+        print_info "Adding SABnzbd remote path mapping..."
+        local pathmapping_body
+        pathmapping_body=$(cat <<EOF
+{
+    "host": "sabnzbd",
+    "remotePath": "/downloads/",
+    "localPath": "/media/downloads/"
+}
+EOF
+)
+        api_post "http://localhost:7878/api/v3/remotepathmapping" "$pathmapping_body" "$api_key" > /dev/null 2>&1 && \
+            report_log "success" "SABnzbd path mapping added" || report_log "info" "Path mapping may already exist"
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

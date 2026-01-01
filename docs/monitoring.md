@@ -153,7 +153,7 @@ Automatically rip Blu-ray and DVD discs when inserted.
 1. **Access:** http://SERVER_IP:8090
 
 2. **Configuration:**
-   The configure-services.sh script sets these automatically:
+   The `./scripts/homelab configure` command sets these automatically:
    - `COMPLETED_PATH`: `/home/arm/movies/` (outputs to Jellyfin movies folder)
    - `SKIP_TRANSCODE`: true (Tdarr handles transcoding)
    - `DELRAWFILES`: false (preserves files on failure)
@@ -162,7 +162,7 @@ Automatically rip Blu-ray and DVD discs when inserted.
 3. **TMDB API Key:**
    - Get free key at: https://www.themoviedb.org/settings/api
    - Add to `.env` as `TMDB_API_KEY`
-   - Run `./scripts/configure-services.sh` to apply
+   - Run `./scripts/homelab configure` to apply
 
 ### Workflow: ARM + Tdarr
 

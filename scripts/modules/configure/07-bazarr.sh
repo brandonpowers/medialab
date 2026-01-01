@@ -40,88 +40,60 @@ main() {
 
     report_log "success" "Bazarr API key: $api_key"
 
-    # Configure Forms authentication via config file (API is unreliable)
+    # Configure via config file (API is unreliable for settings updates)
     local admin_user="${ADMIN_USERNAME:-admin}"
     local admin_pass="${ADMIN_PASSWORD:-}"
     local config_file
     config_file="$(get_project_root)/data/bazarr/config/config/config.yaml"
 
-    if [[ -n "$admin_pass" ]] && [[ -f "$config_file" ]]; then
-        print_info "Configuring Forms authentication..."
+    if [[ -f "$config_file" ]]; then
+        print_info "Configuring Bazarr via config file..."
 
         # Stop Bazarr to safely edit config
-        docker stop bazarr > /dev/null 2>&1 || true
+        docker compose stop bazarr > /dev/null 2>&1 || true
 
-        # Bazarr requires MD5 hash of the password
-        local pass_hash
-        pass_hash=$(echo -n "$admin_pass" | md5sum | cut -d' ' -f1)
+        # Configure Forms authentication
+        if [[ -n "$admin_pass" ]]; then
+            # Bazarr requires MD5 hash of the password
+            local pass_hash
+            pass_hash=$(echo -n "$admin_pass" | md5sum | cut -d' ' -f1)
 
-        # Update auth section in config file
-        sed -i "s/^  type: .*/  type: form/" "$config_file"
-        sed -i "s/^  username: .*/  username: $admin_user/" "$config_file"
-        sed -i "s/^  password: .*/  password: $pass_hash/" "$config_file"
+            # Update auth section in config file
+            sed -i "s/^  type: .*/  type: form/" "$config_file"
+            sed -i "s/^  username: .*/  username: $admin_user/" "$config_file"
+            sed -i "s/^  password: .*/  password: $pass_hash/" "$config_file"
+            report_log "success" "Forms authentication configured for user: $admin_user"
+        fi
+
+        # Enable and configure Sonarr
+        if [[ -n "${SONARR_API_KEY:-}" ]]; then
+            print_info "Linking Sonarr to Bazarr..."
+            sed -i "s/use_sonarr: false/use_sonarr: true/" "$config_file"
+            # Update sonarr section
+            sed -i "/^sonarr:/,/^[a-z]/ {
+                s/apikey: .*/apikey: ${SONARR_API_KEY}/
+                s/ip: .*/ip: sonarr/
+            }" "$config_file"
+            report_log "success" "Sonarr linked"
+        fi
+
+        # Enable and configure Radarr
+        if [[ -n "${RADARR_API_KEY:-}" ]]; then
+            print_info "Linking Radarr to Bazarr..."
+            sed -i "s/use_radarr: false/use_radarr: true/" "$config_file"
+            # Update radarr section
+            sed -i "/^radarr:/,/^[a-z]/ {
+                s/apikey: .*/apikey: ${RADARR_API_KEY}/
+                s/ip: .*/ip: radarr/
+            }" "$config_file"
+            report_log "success" "Radarr linked"
+        fi
 
         # Restart Bazarr
-        docker start bazarr > /dev/null 2>&1 || true
+        docker compose up -d bazarr > /dev/null 2>&1 || true
         sleep 3
-
-        report_log "success" "Forms authentication configured for user: $admin_user"
-    fi
-
-    # Link Sonarr to Bazarr
-    if [[ -n "${SONARR_API_KEY:-}" ]]; then
-        print_info "Linking Sonarr to Bazarr..."
-        local sonarr_body
-        sonarr_body=$(cat <<EOF
-{
-    "sonarr": {
-        "ip": "sonarr",
-        "port": 8989,
-        "base_url": "/",
-        "ssl": false,
-        "apikey": "${SONARR_API_KEY}",
-        "full_update": "Daily",
-        "only_monitored": false
-    },
-    "general": {
-        "use_sonarr": true
-    }
-}
-EOF
-)
-        curl -s -X POST "http://localhost:6767/api/system/settings" \
-            -H "x-api-key: $api_key" \
-            -H "Content-Type: application/json" \
-            -d "$sonarr_body" > /dev/null 2>&1 && \
-            report_log "success" "Sonarr linked" || report_log "warning" "Manual Sonarr configuration may be needed"
-    fi
-
-    # Link Radarr to Bazarr
-    if [[ -n "${RADARR_API_KEY:-}" ]]; then
-        print_info "Linking Radarr to Bazarr..."
-        local radarr_body
-        radarr_body=$(cat <<EOF
-{
-    "radarr": {
-        "ip": "radarr",
-        "port": 7878,
-        "base_url": "/",
-        "ssl": false,
-        "apikey": "${RADARR_API_KEY}",
-        "full_update": "Daily",
-        "only_monitored": false
-    },
-    "general": {
-        "use_radarr": true
-    }
-}
-EOF
-)
-        curl -s -X POST "http://localhost:6767/api/system/settings" \
-            -H "x-api-key: $api_key" \
-            -H "Content-Type: application/json" \
-            -d "$radarr_body" > /dev/null 2>&1 && \
-            report_log "success" "Radarr linked" || report_log "warning" "Manual Radarr configuration may be needed"
+    else
+        report_log "warning" "Bazarr config file not found - manual configuration required"
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

@@ -1,6 +1,18 @@
 # keep secrets & local data out of git
 .env
+.env.backup*
 data/
+
 # docker leftovers
 **/.DS_Store
 **/*.log
+
+# editor/IDE
+*.swp
+*~
+.idea/
+.vscode/
+
+# Python
+__pycache__/
+*.pyc

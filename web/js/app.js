@@ -593,7 +593,6 @@ const setupModules = [
     { id: '03-select-media-drive', name: 'Configure Storage', phase: 'setup' },
     { id: '04-generate-env', name: 'Generate Environment', phase: 'setup' },
     { id: '05-create-directories', name: 'Create Directories', phase: 'setup' },
-    { id: '05b-generate-configs', name: 'Generate Service Configs', phase: 'setup' },
     { id: '06-setup-arm-udev', name: 'Setup ARM Detection', phase: 'setup' },
     { id: '07-pull-images', name: 'Pull Docker Images', phase: 'setup' },
     { id: '08-start-services', name: 'Start Services', phase: 'setup' }

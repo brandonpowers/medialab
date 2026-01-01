@@ -187,8 +187,10 @@ EOF
         nzb_body=$(cat <<EOF
 {
     "enable": true,
+    "redirect": true,
     "protocol": "usenet",
     "priority": 25,
+    "appProfileId": 1,
     "name": "${nzb_name}",
     "fields": [
         {"name": "baseUrl", "value": "${NZB_INDEXER_URL}"},

@@ -200,7 +200,7 @@ sudo chown -R $(whoami):$(whoami) /opt/homelab
 
 # Run setup script
 cd /opt/homelab
-sudo ./scripts/setup-homelab.sh
+sudo ./scripts/homelab setup
 ```
 
 The setup script will:
