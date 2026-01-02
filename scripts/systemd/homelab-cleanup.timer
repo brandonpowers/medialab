@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Homelab Cleanup every 2 days
+
+[Timer]
+# Run at 3:00 AM every 2 days
+OnCalendar=*-*-01,03,05,07,09,11,13,15,17,19,21,23,25,27,29,31 03:00:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target

@@ -1,16 +1,20 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Configuration
+ARM_DB="/opt/homelab/data/arm/home/db/arm.db"
+STUCK_JOB_HOURS=24  # Jobs running longer than this are considered stuck
+
 echo "[*] Homelab Cleanup Script"
 echo "=========================="
 echo ""
 
 # Clean Docker system
-echo "[1/6] Cleaning Docker build cache and unused images..."
+echo "[1/7] Cleaning Docker build cache and unused images..."
 docker system prune -af --filter "until=72h"
 
 echo ""
-echo "[2/6] Cleaning old completed downloads (older than 14 days)..."
+echo "[2/7] Cleaning old completed downloads (older than 14 days)..."
 if [ -d /mnt/media/downloads/complete ]; then
   find /mnt/media/downloads/complete -type f -mtime +14 -delete 2>/dev/null || true
   echo "  [✓] Cleaned old downloads"
@@ -19,7 +23,7 @@ else
 fi
 
 echo ""
-echo "[3/6] Cleaning Tdarr temp files (older than 1 day)..."
+echo "[3/7] Cleaning Tdarr temp files (older than 1 day)..."
 if [ -d /tmp/tdarr ]; then
   find /tmp/tdarr -type f -mtime +1 -delete 2>/dev/null || true
   echo "  [✓] Cleaned Tdarr temp files"
@@ -28,7 +32,7 @@ else
 fi
 
 echo ""
-echo "[4/6] Cleaning ARM empty transcode directories..."
+echo "[4/7] Cleaning ARM empty transcode directories..."
 if [ -d /mnt/media/arm/transcode ]; then
   empty_count=$(find /mnt/media/arm/transcode -type d -empty 2>/dev/null | wc -l)
   if [ "$empty_count" -gt 0 ]; then
@@ -42,7 +46,7 @@ else
 fi
 
 echo ""
-echo "[5/6] Checking ARM raw directory for stuck files (older than 7 days)..."
+echo "[5/7] Checking ARM raw directory for stuck files (older than 7 days)..."
 if [ -d /mnt/media/arm/raw ]; then
   stuck_files=$(find /mnt/media/arm/raw -type f -mtime +7 2>/dev/null | wc -l)
   if [ "$stuck_files" -gt 0 ]; then
@@ -57,9 +61,54 @@ else
 fi
 
 echo ""
-echo "[6/6] Cleaning Docker logs (if any are too large)..."
+echo "[6/7] Cleaning Docker logs (if any are too large)..."
 # Clean logs larger than 50MB
 find /var/lib/docker/containers -name "*.log" -size +50M -delete 2>/dev/null || true
+
+echo ""
+echo "[7/7] Checking ARM database for stuck jobs..."
+if [ -f "$ARM_DB" ]; then
+  # Find jobs stuck in 'ripping' status for longer than STUCK_JOB_HOURS
+  stuck_jobs=$(sqlite3 "$ARM_DB" "
+    SELECT job_id, title, devpath, start_time
+    FROM job
+    WHERE status = 'ripping'
+      AND start_time < datetime('now', '-${STUCK_JOB_HOURS} hours')
+  " 2>/dev/null || echo "")
+
+  if [ -n "$stuck_jobs" ]; then
+    echo "  [!] Found stuck jobs (running >${STUCK_JOB_HOURS}h):"
+    echo "$stuck_jobs" | while IFS='|' read -r job_id title devpath start_time; do
+      echo "      Job #$job_id: $title ($devpath) started $start_time"
+    done
+
+    # Auto-fail stuck jobs and clear drive locks
+    echo "  [*] Auto-failing stuck jobs..."
+    sqlite3 "$ARM_DB" "
+      -- Mark stuck jobs as failed
+      UPDATE job SET
+        status = 'fail',
+        stop_time = datetime('now'),
+        ejected = 1,
+        pid = 0
+      WHERE status = 'ripping'
+        AND start_time < datetime('now', '-${STUCK_JOB_HOURS} hours');
+
+      -- Clear drive locks for any drives pointing to failed jobs
+      UPDATE system_drives SET job_id_current = NULL
+      WHERE job_id_current IN (
+        SELECT job_id FROM job
+        WHERE status = 'fail'
+          AND stop_time > datetime('now', '-1 minute')
+      );
+    " 2>/dev/null && echo "  [✓] Stuck jobs marked as failed and drive locks cleared" \
+                  || echo "  [✗] Failed to update ARM database"
+  else
+    echo "  [✓] No stuck jobs found"
+  fi
+else
+  echo "  [!] ARM database not found at $ARM_DB, skipping"
+fi
 
 echo ""
 echo "[✓] Cleanup complete!"

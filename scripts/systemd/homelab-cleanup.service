@@ -1,0 +1,18 @@
+[Unit]
+Description=Homelab Cleanup Service
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/homelab/scripts/utilities/cleanup.sh
+User=root
+WorkingDirectory=/opt/homelab
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=homelab-cleanup
+
+[Install]
+WantedBy=multi-user.target

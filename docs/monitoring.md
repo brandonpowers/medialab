@@ -222,6 +222,30 @@ docker compose logs -f arm
 - Try cleaning the disc
 - Check raw/ folder for partial rips
 
+**Stuck job blocking new rips:**
+
+Jobs can get stuck in "ripping" status, blocking new disc detection on that drive. The cleanup script (`scripts/utilities/cleanup.sh`) automatically detects and fails jobs stuck for >24 hours. To run manually:
+
+```bash
+# Run cleanup (includes stuck job detection)
+sudo /opt/homelab/scripts/utilities/cleanup.sh
+
+# Or check/fix manually via SQLite:
+sqlite3 /opt/homelab/data/arm/home/db/arm.db
+
+# Check for stuck jobs
+SELECT job_id, title, status, start_time FROM job WHERE status = 'ripping';
+
+# Mark stuck job as failed (replace JOB_ID)
+UPDATE job SET status = 'fail', stop_time = datetime('now'), ejected = 1, pid = 0
+WHERE job_id = JOB_ID;
+
+# Clear drive lock
+UPDATE system_drives SET job_id_current = NULL WHERE mount = '/dev/sr0';
+```
+
+After fixing, restart the container: `docker restart arm`
+
 ---
 
 ## Integration
@@ -274,6 +298,47 @@ docker exec tdarr ls -la /dev/dri/
 - **Use GPU**: 10x faster than CPU
 - **Skip recent files**: Don't transcode new downloads
 - **Monitor disk I/O**: Transcoding is disk-intensive
+
+---
+
+## Scheduled Maintenance
+
+The cleanup script runs automatically every 2 days via systemd timer.
+
+### What it cleans
+
+| Task | Action |
+|------|--------|
+| Docker cache | Prune images/cache older than 72h |
+| Old downloads | Delete completed downloads >14 days |
+| Tdarr temp | Remove temp files >1 day |
+| ARM transcode | Remove empty directories |
+| ARM raw files | Report stuck files >7 days |
+| Docker logs | Delete logs >50MB |
+| ARM stuck jobs | Auto-fail jobs running >24h |
+
+### Installation
+
+```bash
+# Install the systemd timer
+sudo /opt/homelab/scripts/systemd/install-timers.sh
+
+# Check timer status
+systemctl list-timers homelab-cleanup.timer
+
+# Run manually
+sudo /opt/homelab/scripts/utilities/cleanup.sh
+```
+
+### Logs
+
+```bash
+# View cleanup logs
+journalctl -u homelab-cleanup.service
+
+# Last run output
+journalctl -u homelab-cleanup.service -n 50 --no-pager
+```
 
 ---
 
