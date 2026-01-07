@@ -314,6 +314,7 @@ The cleanup script runs automatically every 2 days via systemd timer.
 | Tdarr temp | Remove temp files >1 day |
 | ARM transcode | Remove empty directories |
 | ARM raw files | Report stuck files >7 days |
+| ARM oversized raw | Report raw folders >100GB (copy protection) |
 | Docker logs | Delete logs >50MB |
 | ARM stuck jobs | Auto-fail jobs running >24h |
 
