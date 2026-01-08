@@ -82,10 +82,16 @@ main() {
     fi
 
     # Configure rip method for Blu-rays
+    # NOTE: ARM code ignores RIPMETHOD_BR - only RIPMETHOD is used for the actual decision
+    # Setting RIPMETHOD to "backup" makes Blu-rays use backup mode; DVDs still use mkv (hardcoded)
+    if grep -q 'RIPMETHOD: "mkv"' "$arm_config"; then
+        sed -i 's|RIPMETHOD: "mkv"|RIPMETHOD: "backup"|' "$arm_config"
+        report_log "success" "RIPMETHOD set to backup (better for protected Blu-rays)"
+    fi
+    # Also set RIPMETHOD_BR for documentation purposes (not actually used by ARM)
     if grep -q 'RIPMETHOD_BR: "mkv"' "$arm_config" || grep -q 'RIPMETHOD_BR: "PLACEHOLDER"' "$arm_config"; then
         sed -i 's|RIPMETHOD_BR: "mkv"|RIPMETHOD_BR: "backup"|' "$arm_config"
         sed -i 's|RIPMETHOD_BR: "PLACEHOLDER"|RIPMETHOD_BR: "backup"|' "$arm_config"
-        report_log "success" "RIPMETHOD_BR set to backup (better for protected Blu-rays)"
     fi
 
     # Configure file permissions (enables group write access for processed files)

@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # Configuration
-ARM_DB="/opt/homelab/data/arm/home/db/arm.db"
+ARM_DB="/opt/medialab/data/arm/home/db/arm.db"
 STUCK_JOB_HOURS=24  # Jobs running longer than this are considered stuck
 RAW_SIZE_LIMIT_GB=100  # Raw folders larger than this likely indicate copy protection issues
 
-echo "[*] Homelab Cleanup Script"
+echo "[*] Medialab Cleanup Script"
 echo "=========================="
 echo ""
 

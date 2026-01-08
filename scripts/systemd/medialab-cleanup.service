@@ -1,18 +1,18 @@
 [Unit]
-Description=Homelab Cleanup Service
+Description=Medialab Cleanup Service
 After=docker.service
 Requires=docker.service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/homelab/scripts/utilities/cleanup.sh
+ExecStart=/opt/medialab/scripts/utilities/cleanup.sh
 User=root
-WorkingDirectory=/opt/homelab
+WorkingDirectory=/opt/medialab
 
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=homelab-cleanup
+SyslogIdentifier=medialab-cleanup
 
 [Install]
 WantedBy=multi-user.target

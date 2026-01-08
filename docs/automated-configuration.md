@@ -4,7 +4,7 @@ This guide explains how to use the automated configuration script to link all se
 
 ## What Gets Automated
 
-The `./scripts/homelab configure` command automates the following:
+The `./scripts/medialab configure` command automates the following:
 
 ### ✅ Automatically Configured
 
@@ -49,11 +49,11 @@ The `./scripts/homelab configure` command automates the following:
 
 ### Step 1: Initial Deployment
 
-First, deploy your homelab stack:
+First, deploy your medialab stack:
 
 ```bash
-cd /opt/homelab
-./scripts/homelab setup
+cd /opt/medialab
+./scripts/medialab setup
 ```
 
 This will:
@@ -76,8 +76,8 @@ docker compose ps
 ### Step 3: Run Configuration Script
 
 ```bash
-cd /opt/homelab
-./scripts/homelab configure
+cd /opt/medialab
+./scripts/medialab configure
 ```
 
 This will:
@@ -111,7 +111,7 @@ This will:
    - Complete initial wizard
    - Add your Usenet provider servers
    - Copy API key to `.env` as `SABNZBD_API_KEY`
-   - Re-run: `./scripts/homelab configure`
+   - Re-run: `./scripts/medialab configure`
 
 4. **Jellyfin - Initial Setup**
    - URL: `http://SERVER_IP:8096`
@@ -172,7 +172,7 @@ SABNZBD_API_KEY=<manual>
 
 ## Verification
 
-After running `./scripts/homelab configure`, verify everything is linked:
+After running `./scripts/medialab configure`, verify everything is linked:
 
 ### Check Prowlarr
 
@@ -214,7 +214,7 @@ docker compose ps
 docker compose restart sonarr radarr lidarr
 
 # Wait 2-3 minutes and try again
-./scripts/homelab configure
+./scripts/medialab configure
 ```
 
 ### Download Client Connection Failed
@@ -271,14 +271,14 @@ The script is idempotent - safe to run multiple times. It will:
 
 ```bash
 # Safe to re-run anytime
-./scripts/homelab configure
+./scripts/medialab configure
 ```
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                   homelab configure                         │
+│                   medialab configure                         │
 └─────────────────────────────────────────────────────────────┘
                              │
     ┌────────────────────────┼────────────────────────┐

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# init.sh - Initialize all homelab library functions
+# init.sh - Initialize all medialab library functions
 # Source this file to get access to all shared functions
 #
 # Usage:
@@ -9,15 +9,15 @@
 #
 
 # Get the directory containing this script
-_HOMELAB_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_MEDIALAB_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source all library modules
-source "$_HOMELAB_LIB_DIR/common.sh"
-source "$_HOMELAB_LIB_DIR/progress.sh"
-source "$_HOMELAB_LIB_DIR/detect.sh"
-source "$_HOMELAB_LIB_DIR/env.sh"
-source "$_HOMELAB_LIB_DIR/api.sh"
-source "$_HOMELAB_LIB_DIR/docker.sh"
+source "$_MEDIALAB_LIB_DIR/common.sh"
+source "$_MEDIALAB_LIB_DIR/progress.sh"
+source "$_MEDIALAB_LIB_DIR/detect.sh"
+source "$_MEDIALAB_LIB_DIR/env.sh"
+source "$_MEDIALAB_LIB_DIR/api.sh"
+source "$_MEDIALAB_LIB_DIR/docker.sh"
 
 # Export library directory for other scripts
-export HOMELAB_LIB_DIR="$_HOMELAB_LIB_DIR"
+export MEDIALAB_LIB_DIR="$_MEDIALAB_LIB_DIR"

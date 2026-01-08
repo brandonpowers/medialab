@@ -1,4 +1,4 @@
-# Homelab Media Server
+# Medialab Media Server
 
 A complete, privacy-first media server stack running on Ubuntu Server 24.04 LTS. Features automated media management, streaming, secure remote access with a single-script deployment.
 
@@ -30,28 +30,28 @@ A complete, privacy-first media server stack running on Ubuntu Server 24.04 LTS.
 
 ### Automated Deployment
 
-Deploy and configure your entire homelab with automated scripts:
+Deploy and configure your entire medialab with automated scripts:
 
 ```bash
 # Clone repository
-sudo git clone https://github.com/brandonpowers/homelab.git /opt/homelab
-sudo chown -R $(whoami):$(whoami) /opt/homelab
-cd /opt/homelab
+sudo git clone https://github.com/brandonpowers/medialab.git /opt/medialab
+sudo chown -R $(whoami):$(whoami) /opt/medialab
+cd /opt/medialab
 
 # Step 1: Run automated setup
-sudo ./scripts/homelab setup
+sudo ./scripts/medialab setup
 
 # Step 2: Wait for services to start (2-3 minutes)
-./scripts/homelab status
+./scripts/medialab status
 
 # Step 3: Run automated configuration
-./scripts/homelab configure
+./scripts/medialab configure
 ```
 
 Or run everything at once:
 
 ```bash
-sudo ./scripts/homelab all
+sudo ./scripts/medialab all
 ```
 
 **Setup Phase** - Prepares infrastructure:
@@ -230,7 +230,7 @@ Important directories to backup:
 
 ```bash
 # Create backup
-tar -czf homelab-backup-$(date +%Y%m%d).tar.gz ./data .env docker-compose.yml config/
+tar -czf medialab-backup-$(date +%Y%m%d).tar.gz ./data .env docker-compose.yml config/
 ```
 
 ### Updates
@@ -238,7 +238,7 @@ tar -czf homelab-backup-$(date +%Y%m%d).tar.gz ./data .env docker-compose.yml co
 Stay up to date with:
 
 ```bash
-cd /opt/homelab
+cd /opt/medialab
 git pull
 docker compose pull
 docker compose up -d
@@ -288,9 +288,9 @@ For detailed troubleshooting, see individual service documentation.
 
 ## Support & Community
 
-- **r/selfhosted** - Reddit community for homelab enthusiasts
+- **r/selfhosted** - Reddit community for medialab enthusiasts
 - **r/usenet** - Usenet-specific help and discussions
-- **r/homelab** - General homelab hardware and software
+- **r/medialab** - General medialab hardware and software
 - **TRaSH Guides** - https://trash-guides.info/ - Quality profile guides
 - **Servarr Wiki** - https://wiki.servarr.com/ - Official *arr documentation
 - **Awesome Self-Hosted** - https://github.com/awesome-selfhosted/awesome-selfhosted
@@ -299,4 +299,4 @@ For detailed troubleshooting, see individual service documentation.
 
 **Production-ready and optimized for video streaming!**
 
-Built for the homelab community.
+Built for the medialab community.

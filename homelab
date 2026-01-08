@@ -1,7 +1,0 @@
-#!/bin/bash
-#
-# homelab - Wrapper script for homelab CLI
-# Forwards all commands to scripts/homelab
-#
-
-exec "$(dirname "$0")/scripts/homelab" "$@"

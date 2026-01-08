@@ -158,7 +158,7 @@ main() {
             local auth_response
             auth_response=$(curl -s -X POST "http://localhost:8096/Users/AuthenticateByName" \
                 -H "Content-Type: application/json" \
-                -H "X-Emby-Authorization: MediaBrowser Client=\"Homelab\", Device=\"Homepage\", DeviceId=\"homepage-widget\", Version=\"1.0\"" \
+                -H "X-Emby-Authorization: MediaBrowser Client=\"Medialab\", Device=\"Homepage\", DeviceId=\"homepage-widget\", Version=\"1.0\"" \
                 -d "{\"Username\": \"${admin_user}\", \"Pw\": \"${admin_pass}\"}" 2>/dev/null || true)
             jellyfin_key=$(echo "$auth_response" | jq -r '.AccessToken // empty' 2>/dev/null || true)
             if [[ -n "$jellyfin_key" ]]; then

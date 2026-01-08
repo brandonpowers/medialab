@@ -42,7 +42,7 @@ parse_query
 # Read POST body if present (config JSON)
 CONFIG_FILE=""
 if [[ "${REQUEST_METHOD:-}" == "POST" && -n "${CONTENT_LENGTH:-}" && "$CONTENT_LENGTH" -gt 0 ]]; then
-    CONFIG_FILE="/tmp/homelab-config-$$.json"
+    CONFIG_FILE="/tmp/medialab-config-$$.json"
     head -c "$CONTENT_LENGTH" > "$CONFIG_FILE"
 fi
 
@@ -75,7 +75,7 @@ if [[ ! -f "$module_path" ]]; then
 fi
 
 # Create progress file
-progress_file="/tmp/homelab-progress-$$"
+progress_file="/tmp/medialab-progress-$$"
 touch "$progress_file"
 
 # Run module in background with progress output

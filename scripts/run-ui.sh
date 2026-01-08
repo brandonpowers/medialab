@@ -14,7 +14,7 @@ export PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 URL="http://localhost:8000"
 
-echo "Starting Homelab Setup Wizard..."
+echo "Starting Medialab Setup Wizard..."
 echo ""
 echo "Opening browser to: $URL"
 echo "Press Ctrl+C to stop"

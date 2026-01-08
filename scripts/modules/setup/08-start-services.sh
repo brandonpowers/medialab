@@ -168,7 +168,7 @@ main() {
         echo ""
         echo -e "${YELLOW}Next Steps:${NC}"
         echo "  1. Wait 2-3 minutes for services to fully initialize"
-        echo "  2. Run: ./scripts/homelab configure"
+        echo "  2. Run: ./scripts/medialab configure"
         echo ""
         echo -e "${YELLOW}Useful Commands:${NC}"
         echo "  docker compose logs -f       View logs"

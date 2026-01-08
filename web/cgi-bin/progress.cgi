@@ -4,7 +4,7 @@
 # Streams progress from a progress file to the client
 #
 # Query parameters:
-#   file=/tmp/homelab-progress-12345
+#   file=/tmp/medialab-progress-12345
 #
 
 # Set SSE content type

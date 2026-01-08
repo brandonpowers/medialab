@@ -5,8 +5,8 @@
 #
 
 # Prevent multiple sourcing
-[[ -n "${_HOMELAB_ENV_LOADED:-}" ]] && return 0
-_HOMELAB_ENV_LOADED=1
+[[ -n "${_MEDIALAB_ENV_LOADED:-}" ]] && return 0
+_MEDIALAB_ENV_LOADED=1
 
 # Source common.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -47,7 +47,7 @@ set_env_value() {
     if [[ ! -f "$env_file" ]]; then
         cat > "$env_file" << EOF
 # ============================================
-# HOMELAB ENVIRONMENT CONFIGURATION
+# MEDIALAB ENVIRONMENT CONFIGURATION
 # Generated: $(date)
 # ============================================
 

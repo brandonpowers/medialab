@@ -260,7 +260,7 @@ Add to cron for automatic daily sync:
 ```bash
 crontab -e
 # Add:
-0 3 * * * cd /opt/homelab && docker compose run --rm recyclarr sync
+0 3 * * * cd /opt/medialab && docker compose run --rm recyclarr sync
 ```
 
 ### What Recyclarr Does

@@ -5,8 +5,8 @@
 #
 
 # Prevent multiple sourcing
-[[ -n "${_HOMELAB_PROGRESS_LOADED:-}" ]] && return 0
-_HOMELAB_PROGRESS_LOADED=1
+[[ -n "${_MEDIALAB_PROGRESS_LOADED:-}" ]] && return 0
+_MEDIALAB_PROGRESS_LOADED=1
 
 # Source common.sh for colors
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -188,7 +188,7 @@ finish_progress() {
 # Create a new progress file for SSE streaming
 # Returns the path to the progress file
 create_progress_file() {
-    local prefix="${1:-homelab}"
+    local prefix="${1:-medialab}"
     PROGRESS_FILE="/tmp/${prefix}-progress-$$"
     touch "$PROGRESS_FILE"
     echo "$PROGRESS_FILE"

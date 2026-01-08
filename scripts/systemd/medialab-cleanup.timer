@@ -1,5 +1,5 @@
 [Unit]
-Description=Run Homelab Cleanup every 2 days
+Description=Run Medialab Cleanup every 2 days
 
 [Timer]
 # Run at 3:00 AM every 2 days

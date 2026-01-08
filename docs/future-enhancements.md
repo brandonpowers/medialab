@@ -1,6 +1,6 @@
 # Future Enhancements
 
-Optional additions and ideas for your homelab media server. Your current 24-service stack is **production-ready** with all essential 2025 features.
+Optional additions and ideas for your medialab media server. Your current 24-service stack is **production-ready** with all essential 2025 features.
 
 ## Immediate Optimizations
 
@@ -12,7 +12,7 @@ Keep quality profiles updated automatically:
 crontab -e
 
 # Add this line:
-0 3 * * * cd /opt/homelab && docker compose run --rm recyclarr sync >/dev/null 2>&1
+0 3 * * * cd /opt/medialab && docker compose run --rm recyclarr sync >/dev/null 2>&1
 ```
 
 ### 2. Configure Automated Backups
@@ -20,22 +20,22 @@ Protect your configuration:
 
 ```bash
 #!/bin/bash
-# /opt/homelab/backup.sh
+# /opt/medialab/backup.sh
 
 BACKUP_DIR="/mnt/media/backups"
 DATE=$(date +%Y%m%d_%H%M%S)
 
-cd /opt/homelab
-tar -czf "$BACKUP_DIR/homelab-config-$DATE.tar.gz" \
+cd /opt/medialab
+tar -czf "$BACKUP_DIR/medialab-config-$DATE.tar.gz" \
     ./data .env docker-compose.yml recyclarr.yml
 
 # Keep only last 30 days
-find "$BACKUP_DIR" -name "homelab-config-*.tar.gz" -mtime +30 -delete
+find "$BACKUP_DIR" -name "medialab-config-*.tar.gz" -mtime +30 -delete
 ```
 
 Run daily via cron:
 ```bash
-0 2 * * * /opt/homelab/backup.sh
+0 2 * * * /opt/medialab/backup.sh
 ```
 
 ## User Experience Enhancements
@@ -324,7 +324,7 @@ Things to avoid to keep your stack lean:
 
 ❌ **Plex** - You have Jellyfin (open-source, no paywalls)
 ❌ **Emby** - Same as Plex
-❌ **Prometheus/Grafana** - Overkill for homelab unless you love metrics
+❌ **Prometheus/Grafana** - Overkill for medialab unless you love metrics
 ❌ **Multiple dashboards** - Homepage is already included
 ❌ **Duplicate *arr apps** - One of each is enough
 
@@ -348,7 +348,7 @@ Everything above is **optional**. Focus on using what you have!
 
 ## Resources
 
-- **r/selfhosted** - Homelab community
+- **r/selfhosted** - Medialab community
 - **r/usenet** - Usenet help
 - **TRaSH Guides** - https://trash-guides.info/
 - **Servarr Wiki** - https://wiki.servarr.com/

@@ -31,7 +31,7 @@ jellyfin_api() {
         -s
         -X "$method"
         -H "Content-Type: application/json"
-        -H "X-Emby-Authorization: MediaBrowser Client=\"Homelab Setup\", Device=\"Setup Script\", DeviceId=\"homelab-setup\", Version=\"1.0\""
+        -H "X-Emby-Authorization: MediaBrowser Client=\"Medialab Setup\", Device=\"Setup Script\", DeviceId=\"medialab-setup\", Version=\"1.0\""
     )
 
     if [[ -n "$data" ]]; then
@@ -65,7 +65,7 @@ main() {
 
     local admin_user="${ADMIN_USERNAME:-admin}"
     local admin_pass="${ADMIN_PASSWORD:-}"
-    local server_name="${SERVER_NAME:-homelab}"
+    local server_name="${SERVER_NAME:-medialab}"
     local language="${LANGUAGE:-en}"
 
     print_section "Configuring Jellyfin"
@@ -101,7 +101,7 @@ main() {
     if check_wizard_complete; then
         report_log "warning" "Jellyfin wizard already completed - cannot auto-configure"
         report_log "info" "To reconfigure, run: docker compose down && sudo rm -rf data/jellyfin/config/* && docker compose up -d"
-        report_log "info" "Then run: ./homelab configure"
+        report_log "info" "Then run: ./medialab configure"
         report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
         finish_progress "complete" "$MODULE_NAME"
         return 0
@@ -116,7 +116,7 @@ main() {
         # Check if startup API is available
         local startup_response
         startup_response=$(curl -s "${JELLYFIN_URL}/Startup/User" \
-            -H "X-Emby-Authorization: MediaBrowser Client=\"Homelab\", Device=\"Setup\", DeviceId=\"setup\", Version=\"1.0\"" 2>/dev/null || echo "")
+            -H "X-Emby-Authorization: MediaBrowser Client=\"Medialab\", Device=\"Setup\", DeviceId=\"setup\", Version=\"1.0\"" 2>/dev/null || echo "")
 
         if echo "$startup_response" | grep -q "Name"; then
             startup_api_ready=true
@@ -235,7 +235,7 @@ main() {
         local auth_response
         auth_response=$(curl -s -X POST "${JELLYFIN_URL}/Users/AuthenticateByName" \
             -H "Content-Type: application/json" \
-            -H "X-Emby-Authorization: MediaBrowser Client=\"Homelab Setup\", Device=\"Setup Script\", DeviceId=\"homelab-setup\", Version=\"1.0\"" \
+            -H "X-Emby-Authorization: MediaBrowser Client=\"Medialab Setup\", Device=\"Setup Script\", DeviceId=\"medialab-setup\", Version=\"1.0\"" \
             -d "{\"Username\": \"$admin_user\", \"Pw\": \"$admin_pass\"}" 2>/dev/null)
 
         local access_token

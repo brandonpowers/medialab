@@ -34,7 +34,7 @@ main() {
 
     if [[ ! -f "$project_root/docker-compose.yml" ]]; then
         report_progress 1 5 "docker-compose.yml not found" "error"
-        finish_progress "error" "Please run from the homelab directory"
+        finish_progress "error" "Please run from the medialab directory"
         exit 1
     fi
     report_progress 1 5 "Working directory OK" "complete"

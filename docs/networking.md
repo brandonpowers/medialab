@@ -62,7 +62,7 @@ Cloudflare Tunnel creates an outbound-only connection from your server to Cloudf
    - Go to: **Networks** - **Tunnels**
    - Click "Create a tunnel"
    - Select "Cloudflared"
-   - Name: `homelab-media` (or any name)
+   - Name: `medialab-media` (or any name)
    - Click "Save tunnel"
 
 3. **Install connector** (we'll use Docker - already in your compose file):
@@ -110,7 +110,7 @@ Click "Save tunnel" after adding all routes.
 
 1. **Edit your `.env` file:**
    ```bash
-   cd /opt/homelab
+   cd /opt/medialab
    nano .env
    ```
 
@@ -126,7 +126,7 @@ Click "Save tunnel" after adding all routes.
 
 1. **Pull images and start services:**
    ```bash
-   cd /opt/homelab
+   cd /opt/medialab
    docker compose pull
    docker compose up -d
    ```

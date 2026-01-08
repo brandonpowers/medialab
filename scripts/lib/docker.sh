@@ -5,8 +5,8 @@
 #
 
 # Prevent multiple sourcing
-[[ -n "${_HOMELAB_DOCKER_LOADED:-}" ]] && return 0
-_HOMELAB_DOCKER_LOADED=1
+[[ -n "${_MEDIALAB_DOCKER_LOADED:-}" ]] && return 0
+_MEDIALAB_DOCKER_LOADED=1
 
 # Source dependencies
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

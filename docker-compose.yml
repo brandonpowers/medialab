@@ -277,7 +277,7 @@ services:
       serverPort: 8266
       webUIPort: 8265
       internalNode: "true"
-      nodeName: HomeLabNode
+      nodeName: MediaLabNode
       # Authentication - seededApiKey pre-creates an API key for automated deployments
       # Note: First user must still be created via web UI, but API access works with this key
       serverAuth: "true"

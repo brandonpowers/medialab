@@ -1,14 +1,14 @@
 #!/bin/bash
 #
-# homelab - Main CLI entry point for homelab automation
+# medialab - Main CLI entry point for medialab automation
 # Unified interface for setup, configuration, and management
 #
 # Usage:
-#   ./scripts/homelab setup              Run setup phase
-#   ./scripts/homelab configure          Run configure phase (includes Homepage)
-#   ./scripts/homelab all                Run setup and configure phases
-#   ./scripts/homelab status             Show service status
-#   ./scripts/homelab --help             Show help
+#   ./scripts/medialab setup              Run setup phase
+#   ./scripts/medialab configure          Run configure phase (includes Homepage)
+#   ./scripts/medialab all                Run setup and configure phases
+#   ./scripts/medialab status             Show service status
+#   ./scripts/medialab --help             Show help
 #
 # Options:
 #   --json           Output JSON format (for UI)
@@ -18,11 +18,11 @@
 set -euo pipefail
 
 # Script directory (use unique name to avoid collision with sourced scripts)
-HOMELAB_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "$HOMELAB_SCRIPT_DIR/.." && pwd)"
+MEDIALAB_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$MEDIALAB_SCRIPT_DIR/.." && pwd)"
 
 # Source library
-source "$HOMELAB_SCRIPT_DIR/lib/init.sh"
+source "$MEDIALAB_SCRIPT_DIR/lib/init.sh"
 
 # ============================================
 # VERSION AND HELP
@@ -32,10 +32,10 @@ VERSION="2.0.0"
 
 show_help() {
     cat << EOF
-Homelab CLI - Video Streaming Infrastructure Automation
+Medialab CLI - Video Streaming Infrastructure Automation
 
 USAGE:
-    homelab <command> [options]
+    medialab <command> [options]
 
 COMMANDS:
     start           Launch the web UI setup wizard
@@ -51,16 +51,16 @@ OPTIONS:
     -v, --version   Show version
 
 EXAMPLES:
-    ./homelab start
-    ./homelab setup
-    ./homelab configure
+    ./medialab start
+    ./medialab setup
+    ./medialab configure
 
 For more information, see: docs/README.md
 EOF
 }
 
 show_version() {
-    echo "homelab version $VERSION"
+    echo "medialab version $VERSION"
 }
 
 # ============================================
@@ -68,7 +68,7 @@ show_version() {
 # ============================================
 
 run_start() {
-    exec "$HOMELAB_SCRIPT_DIR/run-ui.sh"
+    exec "$MEDIALAB_SCRIPT_DIR/run-ui.sh"
 }
 
 run_setup() {
@@ -97,7 +97,7 @@ run_setup() {
 
     for module in "${modules[@]}"; do
         ((++current))
-        local module_path="$HOMELAB_SCRIPT_DIR/modules/setup/$module"
+        local module_path="$MEDIALAB_SCRIPT_DIR/modules/setup/$module"
 
         if [[ ! -f "$module_path" ]]; then
             report_log "warning" "Module not found: $module"
@@ -125,7 +125,7 @@ run_setup() {
     print_success "Setup phase complete!"
     echo ""
     print_info "Next: Wait 2-3 minutes for services to initialize, then run:"
-    print_info "  ./scripts/homelab configure"
+    print_info "  ./scripts/medialab configure"
 }
 
 run_configure() {
@@ -139,11 +139,11 @@ run_configure() {
     # Check if services are running
     if ! docker compose ps 2>/dev/null | grep -q "Up" ; then
         print_error "Services are not running. Run setup first:"
-        print_info "  sudo ./scripts/homelab setup"
+        print_info "  sudo ./scripts/medialab setup"
         exit 1
     fi
 
-    local module_dir="$HOMELAB_SCRIPT_DIR/modules/configure"
+    local module_dir="$MEDIALAB_SCRIPT_DIR/modules/configure"
 
     if [[ -d "$module_dir" ]] && ls "$module_dir"/*.sh &>/dev/null; then
         # Run modular configure scripts
@@ -249,7 +249,7 @@ main() {
     done
 
     # Export config file for modules
-    [[ -n "$config_file" ]] && export HOMELAB_CONFIG="$config_file"
+    [[ -n "$config_file" ]] && export MEDIALAB_CONFIG="$config_file"
 
     # Execute command
     case "$command" in

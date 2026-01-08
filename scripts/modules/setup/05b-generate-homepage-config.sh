@@ -44,7 +44,7 @@ main() {
     print_info "Generating settings.yaml..."
     cat > "$config_dir/settings.yaml" <<'EOF'
 ---
-title: Homelab Dashboard
+title: Medialab Dashboard
 favicon: https://gethomepage.dev/img/favicon.ico
 theme: dark
 color: slate

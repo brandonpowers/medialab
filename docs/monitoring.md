@@ -153,7 +153,7 @@ Automatically rip Blu-ray and DVD discs when inserted.
 1. **Access:** http://SERVER_IP:8090
 
 2. **Configuration:**
-   The `./scripts/homelab configure` command sets these automatically:
+   The `./scripts/medialab configure` command sets these automatically:
    - `COMPLETED_PATH`: `/home/arm/movies/` (outputs to Jellyfin movies folder)
    - `SKIP_TRANSCODE`: true (Tdarr handles transcoding)
    - `DELRAWFILES`: false (preserves files on failure)
@@ -162,7 +162,7 @@ Automatically rip Blu-ray and DVD discs when inserted.
 3. **TMDB API Key:**
    - Get free key at: https://www.themoviedb.org/settings/api
    - Add to `.env` as `TMDB_API_KEY`
-   - Run `./scripts/homelab configure` to apply
+   - Run `./scripts/medialab configure` to apply
 
 ### Workflow: ARM + Tdarr
 
@@ -228,10 +228,10 @@ Jobs can get stuck in "ripping" status, blocking new disc detection on that driv
 
 ```bash
 # Run cleanup (includes stuck job detection)
-sudo /opt/homelab/scripts/utilities/cleanup.sh
+sudo /opt/medialab/scripts/utilities/cleanup.sh
 
 # Or check/fix manually via SQLite:
-sqlite3 /opt/homelab/data/arm/home/db/arm.db
+sqlite3 /opt/medialab/data/arm/home/db/arm.db
 
 # Check for stuck jobs
 SELECT job_id, title, status, start_time FROM job WHERE status = 'ripping';
@@ -322,23 +322,23 @@ The cleanup script runs automatically every 2 days via systemd timer.
 
 ```bash
 # Install the systemd timer
-sudo /opt/homelab/scripts/systemd/install-timers.sh
+sudo /opt/medialab/scripts/systemd/install-timers.sh
 
 # Check timer status
-systemctl list-timers homelab-cleanup.timer
+systemctl list-timers medialab-cleanup.timer
 
 # Run manually
-sudo /opt/homelab/scripts/utilities/cleanup.sh
+sudo /opt/medialab/scripts/utilities/cleanup.sh
 ```
 
 ### Logs
 
 ```bash
 # View cleanup logs
-journalctl -u homelab-cleanup.service
+journalctl -u medialab-cleanup.service
 
 # Last run output
-journalctl -u homelab-cleanup.service -n 50 --no-pager
+journalctl -u medialab-cleanup.service -n 50 --no-pager
 ```
 
 ---

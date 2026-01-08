@@ -1,4 +1,4 @@
-// Homelab Setup Wizard JavaScript
+// Medialab Setup Wizard JavaScript
 
 // State
 let currentStep = 1;
@@ -16,7 +16,7 @@ let installCompleted = false;
 const API_BASE = '/cgi-bin';
 
 // localStorage key for form persistence
-const FORM_STORAGE_KEY = 'homelab_setup_form';
+const FORM_STORAGE_KEY = 'medialab_setup_form';
 
 // ============================================
 // FORM PERSISTENCE
@@ -646,7 +646,7 @@ function prepareInstall() {
         },
         system: {
             timezone: getVal('timezone') || 'America/Chicago',
-            server_name: getVal('server-name') || 'homelab',
+            server_name: getVal('server-name') || 'medialab',
             language: getVal('language') || 'en'
         },
         storage: {
@@ -736,7 +736,7 @@ function showConfigSummary() {
     };
 
     const items = [
-        { label: 'Server Name', value: config.system?.server_name || 'homelab' },
+        { label: 'Server Name', value: config.system?.server_name || 'medialab' },
         { label: 'Language', value: languageNames[config.system?.language] || 'English' },
         { label: 'Timezone', value: config.system.timezone || 'America/Chicago' },
         { label: 'Admin User', value: config.admin?.username || '(not set)' },

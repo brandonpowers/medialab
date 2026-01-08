@@ -137,7 +137,7 @@ main() {
         server_name=$(get_env_value "SERVER_NAME" "$env_file")
     fi
     if [[ -z "$server_name" ]]; then
-        server_name="homelab"
+        server_name="medialab"
     fi
     set_env_value "SERVER_NAME" "$server_name" "false" "$env_file" || true
     report_log "success" "Server name: $server_name"

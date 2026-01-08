@@ -1,12 +1,12 @@
 #!/bin/bash
 #
-# common.sh - Shared utility functions for homelab scripts
+# common.sh - Shared utility functions for medialab scripts
 # This is the single source of truth for colors and print functions
 #
 
 # Prevent multiple sourcing
-[[ -n "${_HOMELAB_COMMON_LOADED:-}" ]] && return 0
-_HOMELAB_COMMON_LOADED=1
+[[ -n "${_MEDIALAB_COMMON_LOADED:-}" ]] && return 0
+_MEDIALAB_COMMON_LOADED=1
 
 # ============================================
 # COLORS
@@ -36,7 +36,7 @@ fi
 # Print a section header
 print_header() {
     echo -e "${BLUE}========================================${NC}"
-    echo -e "${BLUE}  HOMELAB - $1${NC}"
+    echo -e "${BLUE}  MEDIALAB - $1${NC}"
     echo -e "${BLUE}========================================${NC}"
     echo ""
 }

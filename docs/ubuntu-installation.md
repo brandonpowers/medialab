@@ -1,6 +1,6 @@
 # Ubuntu Server Installation Guide
 
-Complete guide for installing Ubuntu Server 24.04 LTS for the homelab stack.
+Complete guide for installing Ubuntu Server 24.04 LTS for the medialab stack.
 
 ## Prerequisites
 
@@ -91,7 +91,7 @@ Confirm changes: **Continue**
 ### 8. Profile Setup
 
 - **Your name**: Your full name
-- **Server name**: `homelab-media` (recommended)
+- **Server name**: `medialab-media` (recommended)
 - **Username**: Your username (e.g., `brandon`)
 - **Password**: Strong password
 - Confirm password
@@ -175,7 +175,7 @@ sudo netplan apply
 If you didn't set it during installation:
 
 ```bash
-sudo hostnamectl set-hostname homelab-media
+sudo hostnamectl set-hostname medialab-media
 ```
 
 ### 6. Enable Automatic Security Updates (Optional)
@@ -187,20 +187,20 @@ sudo dpkg-reconfigure -plow unattended-upgrades
 
 Select: **Yes**
 
-## Install Homelab Stack
+## Install Medialab Stack
 
-Now you're ready to deploy the homelab:
+Now you're ready to deploy the medialab:
 
 ```bash
 # Clone repository
-sudo git clone https://github.com/yourusername/homelab.git /opt/homelab
+sudo git clone https://github.com/yourusername/medialab.git /opt/medialab
 
 # Change ownership
-sudo chown -R $(whoami):$(whoami) /opt/homelab
+sudo chown -R $(whoami):$(whoami) /opt/medialab
 
 # Run setup script
-cd /opt/homelab
-sudo ./scripts/homelab setup
+cd /opt/medialab
+sudo ./scripts/medialab setup
 ```
 
 The setup script will:
@@ -215,7 +215,7 @@ The setup script will:
 ### Check Services
 
 ```bash
-cd /opt/homelab
+cd /opt/medialab
 docker compose ps
 ```
 
@@ -293,5 +293,5 @@ Important directories to backup regularly:
 
 ```bash
 # Create backup
-tar -czf homelab-backup-$(date +%Y%m%d).tar.gz ./data .env docker-compose.yml
+tar -czf medialab-backup-$(date +%Y%m%d).tar.gz ./data .env docker-compose.yml
 ```

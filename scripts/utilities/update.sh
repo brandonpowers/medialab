@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /opt/homelab
+cd /opt/medialab
 
-echo "[*] Homelab Update Script"
+echo "[*] Medialab Update Script"
 echo "========================="
 echo ""
 

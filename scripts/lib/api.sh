@@ -5,8 +5,8 @@
 #
 
 # Prevent multiple sourcing
-[[ -n "${_HOMELAB_API_LOADED:-}" ]] && return 0
-_HOMELAB_API_LOADED=1
+[[ -n "${_MEDIALAB_API_LOADED:-}" ]] && return 0
+_MEDIALAB_API_LOADED=1
 
 # Source common.sh and progress.sh
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

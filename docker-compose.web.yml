@@ -1,5 +1,5 @@
 # docker-compose.web.yml
-# Web UI for Homelab Setup
+# Web UI for Medialab Setup
 #
 # Usage:
 #   docker compose -f docker-compose.web.yml up -d
@@ -7,9 +7,9 @@
 #
 
 services:
-  homelab-ui:
+  medialab-ui:
     image: python:3.11-slim
-    container_name: homelab-ui
+    container_name: medialab-ui
     working_dir: /app
     command: >
       sh -c "
@@ -27,10 +27,10 @@ services:
       - ./data:/app/data:rw
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
-      - HOMELAB_ROOT=/app
+      - MEDIALAB_ROOT=/app
     restart: unless-stopped
     labels:
-      - "com.homelab.description=Setup Wizard Web UI"
+      - "com.medialab.description=Setup Wizard Web UI"
 
 # Note: For production use, consider:
 # 1. Adding authentication

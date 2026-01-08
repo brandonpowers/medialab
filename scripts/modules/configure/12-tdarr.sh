@@ -287,7 +287,7 @@ EOF
         "data": {
             "collection": "NodeJSONDB",
             "mode": "update",
-            "docID": "HomeLabNode",
+            "docID": "MediaLabNode",
             "obj": {
                 "workerLimits": {
                     "healthcheckcpu": 0,
