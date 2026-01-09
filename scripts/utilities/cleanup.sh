@@ -11,11 +11,11 @@ echo "=========================="
 echo ""
 
 # Clean Docker system
-echo "[1/8] Cleaning Docker build cache and unused images..."
+echo "[1/10] Cleaning Docker build cache and unused images..."
 docker system prune -af --filter "until=72h"
 
 echo ""
-echo "[2/8] Cleaning old completed downloads (older than 14 days)..."
+echo "[2/10] Cleaning old completed downloads (older than 14 days)..."
 if [ -d /mnt/media/downloads/complete ]; then
   find /mnt/media/downloads/complete -type f -mtime +14 -delete 2>/dev/null || true
   echo "  [✓] Cleaned old downloads"
@@ -24,7 +24,7 @@ else
 fi
 
 echo ""
-echo "[3/8] Cleaning Tdarr temp files (older than 1 day)..."
+echo "[3/10] Cleaning Tdarr temp files (older than 1 day)..."
 if [ -d /tmp/tdarr ]; then
   find /tmp/tdarr -type f -mtime +1 -delete 2>/dev/null || true
   echo "  [✓] Cleaned Tdarr temp files"
@@ -33,7 +33,7 @@ else
 fi
 
 echo ""
-echo "[4/8] Cleaning ARM empty transcode directories..."
+echo "[4/10] Cleaning ARM empty transcode directories..."
 if [ -d /mnt/media/arm/transcode ]; then
   empty_count=$(find /mnt/media/arm/transcode -type d -empty 2>/dev/null | wc -l)
   if [ "$empty_count" -gt 0 ]; then
@@ -47,7 +47,7 @@ else
 fi
 
 echo ""
-echo "[5/8] Checking ARM raw directory for stuck files (older than 7 days)..."
+echo "[5/10] Checking ARM raw directory for stuck files (older than 7 days)..."
 if [ -d /mnt/media/arm/raw ]; then
   stuck_files=$(find /mnt/media/arm/raw -type f -mtime +7 2>/dev/null | wc -l)
   if [ "$stuck_files" -gt 0 ]; then
@@ -62,7 +62,7 @@ else
 fi
 
 echo ""
-echo "[6/8] Checking for oversized ARM raw folders (copy protection)..."
+echo "[6/10] Checking for oversized ARM raw folders (copy protection)..."
 if [ -d /mnt/media/arm/raw ]; then
   oversized_found=false
   while IFS= read -r dir; do
@@ -89,12 +89,12 @@ else
 fi
 
 echo ""
-echo "[7/8] Cleaning Docker logs (if any are too large)..."
+echo "[7/10] Cleaning Docker logs (if any are too large)..."
 # Clean logs larger than 50MB
 find /var/lib/docker/containers -name "*.log" -size +50M -delete 2>/dev/null || true
 
 echo ""
-echo "[8/8] Checking ARM database for stuck jobs..."
+echo "[8/10] Checking ARM database for stuck jobs..."
 if [ -f "$ARM_DB" ]; then
   # Find jobs stuck in 'ripping' status for longer than STUCK_JOB_HOURS
   stuck_jobs=$(sqlite3 "$ARM_DB" "
@@ -133,6 +133,34 @@ if [ -f "$ARM_DB" ]; then
                   || echo "  [✗] Failed to update ARM database"
   else
     echo "  [✓] No stuck jobs found"
+  fi
+else
+  echo "  [!] ARM database not found at $ARM_DB, skipping"
+fi
+
+echo ""
+echo "[9/10] Cleaning ARM empty raw directories (from failed rips)..."
+if [ -d /mnt/media/arm/raw ]; then
+  empty_count=$(find /mnt/media/arm/raw -maxdepth 1 -type d -empty 2>/dev/null | wc -l)
+  if [ "$empty_count" -gt 0 ]; then
+    find /mnt/media/arm/raw -maxdepth 1 -type d -empty -delete 2>/dev/null || true
+    echo "  [✓] Removed $empty_count empty raw directories"
+  else
+    echo "  [✓] No empty raw directories"
+  fi
+else
+  echo "  [!] /mnt/media/arm/raw not found, skipping"
+fi
+
+echo ""
+echo "[10/10] Cleaning ARM failed jobs from database..."
+if [ -f "$ARM_DB" ]; then
+  failed_count=$(sqlite3 "$ARM_DB" "SELECT COUNT(*) FROM job WHERE status = 'fail'" 2>/dev/null || echo "0")
+  if [ "$failed_count" -gt 0 ]; then
+    sqlite3 "$ARM_DB" "DELETE FROM job WHERE status = 'fail'" 2>/dev/null || true
+    echo "  [✓] Removed $failed_count failed jobs from ARM database"
+  else
+    echo "  [✓] No failed jobs in ARM database"
   fi
 else
   echo "  [!] ARM database not found at $ARM_DB, skipping"

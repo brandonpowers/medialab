@@ -71,4 +71,37 @@ if [ -d "/home/arm/media/transcode" ]; then
     fi
 fi
 
+# Clean up empty directories in raw (from failed rips)
+if [ -d "/home/arm/media/raw" ]; then
+    empty_count=$(find /home/arm/media/raw -maxdepth 1 -type d -empty 2>/dev/null | wc -l)
+    if [ "$empty_count" -gt 0 ]; then
+        log "Cleaning $empty_count empty raw directories"
+        find /home/arm/media/raw -maxdepth 1 -type d -empty -delete 2>/dev/null || true
+    fi
+fi
+
+# Clean up failed jobs from ARM database (older than 1 day)
+if [ -f "/home/arm/db/arm.db" ]; then
+    failed_count=$(python3 -c "
+import sqlite3
+conn = sqlite3.connect('/home/arm/db/arm.db')
+cur = conn.cursor()
+cur.execute(\"SELECT COUNT(*) FROM job WHERE status = 'fail' AND start_time < datetime('now', '-1 day')\")
+print(cur.fetchone()[0])
+conn.close()
+" 2>/dev/null || echo "0")
+
+    if [ "$failed_count" -gt 0 ]; then
+        log "Cleaning $failed_count failed jobs older than 1 day from database"
+        python3 -c "
+import sqlite3
+conn = sqlite3.connect('/home/arm/db/arm.db')
+cur = conn.cursor()
+cur.execute(\"DELETE FROM job WHERE status = 'fail' AND start_time < datetime('now', '-1 day')\")
+conn.commit()
+conn.close()
+" 2>/dev/null || true
+    fi
+fi
+
 log "Ownership fix complete"
