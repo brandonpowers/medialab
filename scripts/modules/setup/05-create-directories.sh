@@ -154,6 +154,7 @@ main() {
         "$media_root/music"
         "$media_root/downloads"
         "$media_root/arm"
+        "$media_root/unidentified"  # ARM output for discs that can't be auto-identified
     )
 
     local fixed_count=0
