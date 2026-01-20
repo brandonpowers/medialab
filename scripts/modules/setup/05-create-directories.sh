@@ -100,6 +100,23 @@ main() {
         chmod 775 "$dir" 2>/dev/null || true
     done
 
+    # Step 1c: Create download category directories
+    # These are used by qBittorrent/SABnzbd with Sonarr/Radarr/Lidarr categories
+    local download_category_dirs=(
+        "$media_root/downloads/complete/movies"     # Radarr category
+        "$media_root/downloads/complete/tv-sonarr"  # Sonarr category
+        "$media_root/downloads/complete/music"      # Lidarr category
+    )
+
+    for dir in "${download_category_dirs[@]}"; do
+        if [[ ! -d "$dir" ]]; then
+            mkdir -p "$dir"
+            report_log "success" "Created download category directory: $dir"
+        fi
+        chown "${puid}:${pgid}" "$dir" 2>/dev/null || true
+        chmod 775 "$dir" 2>/dev/null || true
+    done
+
     # Step 2: Set ownership
     report_progress 2 4 "Setting directory ownership (${puid}:${pgid})..."
 

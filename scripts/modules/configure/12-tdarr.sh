@@ -279,6 +279,45 @@ EOF
         print_info "Tdarr TV Shows library already exists"
     fi
 
+    # Create Unidentified library (for ARM rips that couldn't be auto-identified)
+    if ! echo "$existing_libraries" | grep -q '"name":"Unidentified"'; then
+        print_info "Creating Tdarr Unidentified library..."
+        local unid_library_id
+        unid_library_id=$(openssl rand -hex 5)
+
+        local unid_library_body
+        unid_library_body=$(cat <<EOF
+{
+    "data": {
+        "collection": "LibrarySettingsJSONDB",
+        "mode": "insert",
+        "docID": "${unid_library_id}",
+        "obj": {
+            "_id": "${unid_library_id}",
+            "name": "Unidentified",
+            "priority": 2,
+            "folder": "/media/unidentified",
+            "cache": "/temp",
+            "container": ".mkv",
+            "containerFilter": "mkv,mp4,mov,m4v,mpg,mpeg,avi,flv,webm,wmv,vob,evo,iso,m2ts,ts",
+            "folderWatching": true,
+            "processLibrary": true,
+            "processTranscodes": true,
+            "processHealthChecks": true,
+            "scanOnStart": true,
+            "schedule": ${tdarr_schedule},
+            "flowId": "${flow_id}"
+        }
+    }
+}
+EOF
+)
+        tdarr_api POST "/api/v2/cruddb" "$unid_library_body" > /dev/null 2>&1 && \
+            report_log "success" "Unidentified library created" || report_log "warning" "Could not create Unidentified library"
+    else
+        print_info "Tdarr Unidentified library already exists"
+    fi
+
     # Configure node workers
     print_info "Configuring Tdarr node worker limits..."
     sleep 3

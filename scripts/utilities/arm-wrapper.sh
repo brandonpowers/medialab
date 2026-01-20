@@ -47,6 +47,48 @@ for dir in /home/arm/media/raw /home/arm/media/transcode /home/arm/media/complet
     fi
 done
 
+# Auto-cleanup failed jobs from database before starting
+# This allows re-ripping discs that previously failed
+echo "[arm-wrapper] Cleaning up any failed job entries..."
+python3 -c "
+import sqlite3
+import os
+import shutil
+
+try:
+    conn = sqlite3.connect('/home/arm/db/arm.db')
+    cur = conn.cursor()
+
+    # Get titles of failed jobs before deleting (to clean up their directories)
+    cur.execute(\"SELECT DISTINCT title FROM job WHERE status = 'fail'\")
+    failed_titles = [row[0] for row in cur.fetchall()]
+
+    # Delete failed jobs
+    cur.execute(\"DELETE FROM job WHERE status = 'fail'\")
+    if cur.rowcount > 0:
+        print(f'[arm-wrapper] Removed {cur.rowcount} failed job(s) from database')
+    conn.commit()
+    conn.close()
+
+    # Clean up empty/partial directories from failed rips
+    unid_path = '/home/arm/movies/unidentified'
+    if os.path.exists(unid_path):
+        for item in os.listdir(unid_path):
+            item_path = os.path.join(unid_path, item)
+            if os.path.isdir(item_path):
+                # Remove empty directories or directories with only empty subdirs
+                try:
+                    contents = os.listdir(item_path)
+                    # If empty or only contains empty 'extras' folder
+                    if not contents or (contents == ['extras'] and not os.listdir(os.path.join(item_path, 'extras'))):
+                        shutil.rmtree(item_path)
+                        print(f'[arm-wrapper] Removed empty directory: {item}')
+                except:
+                    pass
+except Exception as e:
+    print(f'[arm-wrapper] DB cleanup skipped: {e}')
+" 2>/dev/null || true
+
 echo "[arm-wrapper] Launching ripper as arm user (UID: $ARM_UID)"
 
 # Use gosu to drop privileges and run the ripper as the arm user
