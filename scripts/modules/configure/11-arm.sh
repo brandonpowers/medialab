@@ -75,28 +75,36 @@ main() {
         report_log "success" "DELRAWFILES disabled (preserves files on failure)"
     fi
 
-    # Add MakeMKV retry arguments
+    # Add MakeMKV arguments
+    # NOTE: --noscan was removed - it prevents proper disc analysis and causes
+    # copy-protected discs (with playlist obfuscation) to fail silently
     if grep -q 'MKV_ARGS: ""' "$arm_config"; then
-        sed -i 's|MKV_ARGS: ""|MKV_ARGS: "--minlength=600 -r --directio=false --noscan"|' "$arm_config"
-        report_log "success" "MKV_ARGS set for protected disc handling"
+        sed -i 's|MKV_ARGS: ""|MKV_ARGS: "--minlength=600 -r --directio=false"|' "$arm_config"
+        report_log "success" "MKV_ARGS configured for disc ripping"
     fi
 
-    # Configure rip method for Blu-rays
-    # NOTE: ARM code ignores RIPMETHOD_BR - only RIPMETHOD is used for the actual decision
-    # Setting RIPMETHOD to "backup" makes Blu-rays use backup mode; DVDs still use mkv (hardcoded)
-    if grep -q 'RIPMETHOD: "mkv"' "$arm_config"; then
-        sed -i 's|RIPMETHOD: "mkv"|RIPMETHOD: "backup"|' "$arm_config"
-        report_log "success" "RIPMETHOD set to backup (better for protected Blu-rays)"
+    # Configure rip method - use "mkv" for direct MKV output (faster, smaller files)
+    # "backup" mode creates full disc backups; "mkv" extracts tracks directly to MKV
+    if grep -q 'RIPMETHOD: "backup"' "$arm_config"; then
+        sed -i 's|RIPMETHOD: "backup"|RIPMETHOD: "mkv"|' "$arm_config"
+        report_log "success" "RIPMETHOD set to mkv (direct MKV extraction)"
     fi
-    # Also set RIPMETHOD_BR for documentation purposes (not actually used by ARM)
-    if grep -q 'RIPMETHOD_BR: "mkv"' "$arm_config" || grep -q 'RIPMETHOD_BR: "PLACEHOLDER"' "$arm_config"; then
-        sed -i 's|RIPMETHOD_BR: "mkv"|RIPMETHOD_BR: "backup"|' "$arm_config"
-        sed -i 's|RIPMETHOD_BR: "PLACEHOLDER"|RIPMETHOD_BR: "backup"|' "$arm_config"
+    # Also set RIPMETHOD_BR for documentation purposes
+    if grep -q 'RIPMETHOD_BR: "backup"' "$arm_config" || grep -q 'RIPMETHOD_BR: "PLACEHOLDER"' "$arm_config"; then
+        sed -i 's|RIPMETHOD_BR: "backup"|RIPMETHOD_BR: "mkv"|' "$arm_config"
+        sed -i 's|RIPMETHOD_BR: "PLACEHOLDER"|RIPMETHOD_BR: "mkv"|' "$arm_config"
+    fi
+
+    # Disable MAINFEATURE for better reliability with copy-protected discs
+    # When true: ARM rips only the longest track by duration - fails on protected discs with fake durations
+    # When false: ARM rips all tracks and selects the largest by file size - more reliable
+    if grep -q 'MAINFEATURE: true' "$arm_config"; then
+        sed -i 's|MAINFEATURE: true|MAINFEATURE: false|' "$arm_config"
+        report_log "success" "MAINFEATURE disabled (rips all tracks for reliability)"
     fi
 
     # Configure file permissions (enables group write access for processed files)
-    # NOTE: SET_MEDIA_OWNER/CHOWN settings exist in ARM config but are NOT implemented in ARM code
-    # File ownership is handled by default ACLs on media directories (set in create_media_structure)
+    # With our custom wrapper script, files are created as arm user, so chmod 775 ensures group access
     if grep -q 'SET_MEDIA_PERMISSIONS: false' "$arm_config"; then
         sed -i 's|SET_MEDIA_PERMISSIONS: false|SET_MEDIA_PERMISSIONS: true|' "$arm_config"
         report_log "success" "SET_MEDIA_PERMISSIONS enabled"
@@ -107,22 +115,9 @@ main() {
         report_log "success" "CHMOD_VALUE set to 775 (group writable)"
     fi
 
-    # Configure BASH_SCRIPT for post-rip ownership fix
-    # This script runs after each rip to fix root-owned files and clean up empty directories
-    local fix_script="/etc/arm/config/arm-fix-ownership.sh"
-    if grep -q 'BASH_SCRIPT: ""' "$arm_config"; then
-        sed -i "s|BASH_SCRIPT: \"\"|BASH_SCRIPT: \"${fix_script}\"|" "$arm_config"
-        report_log "success" "BASH_SCRIPT configured for post-rip ownership fix"
-    fi
-
-    # Ensure the fix-ownership script exists in ARM config
-    local source_script="${project_root}/scripts/utilities/arm-fix-ownership.sh"
-    local dest_script="${project_root}/data/arm/config/arm-fix-ownership.sh"
-    if [[ -f "$source_script" ]] && [[ ! -f "$dest_script" ]]; then
-        cp "$source_script" "$dest_script"
-        chmod +x "$dest_script"
-        report_log "success" "Copied arm-fix-ownership.sh to ARM config"
-    fi
+    # Note: BASH_SCRIPT configuration removed - no longer needed
+    # The custom arm-wrapper.sh uses gosu to run the ripper as the arm user,
+    # so files are created with correct ownership from the start.
 
     # Configure ARM web UI authentication
     local admin_user="${ADMIN_USERNAME:-admin}"

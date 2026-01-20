@@ -87,18 +87,13 @@ main() {
         fi
     fi
 
-    # Step 5: Check ACL tools (required for media directory permissions)
+    # Step 5: Check ACL tools (optional - no longer required for ARM permissions)
+    # Our custom arm-wrapper.sh uses gosu to run the ripper as the correct user
     report_progress 5 5 "Checking ACL tools..."
     if command_exists setfacl; then
         report_progress 5 5 "ACL tools installed" "complete"
     else
-        report_progress 5 5 "Installing ACL tools..." "running"
-        if [[ $EUID -eq 0 ]]; then
-            apt-get install -y acl &>/dev/null
-            report_progress 5 5 "ACL tools installed" "complete"
-        else
-            report_progress 5 5 "ACL tools not found (install with: sudo apt install acl)" "warning"
-        fi
+        report_progress 5 5 "ACL tools not installed (optional)" "complete"
     fi
 
     finish_progress "complete" "All prerequisites satisfied"

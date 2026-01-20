@@ -57,8 +57,7 @@ sudo ./scripts/medialab all
 **Setup Phase** - Prepares infrastructure:
 - Installs Docker and Docker Compose
 - Detects GPU and optical drives
-- Configures storage and media directories
-- Sets comprehensive ACLs for automatic permission inheritance
+- Configures storage and media directories with correct ownership
 - Generates `.env` with secure passwords
 - Sets up ARM udev rules for disc detection
 - Pulls Docker images and starts services

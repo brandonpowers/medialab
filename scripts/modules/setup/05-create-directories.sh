@@ -79,6 +79,27 @@ main() {
     report_log "success" "Created $created directories ($existed already existed)"
     report_progress 1 4 "Service directories ready" "complete"
 
+    # Step 1b: Create ARM media directories on external drive
+    # These are separate from service config dirs - they hold actual ripped media
+    # ARM/MakeMKV runs as root inside the container, so files get created as root
+    # We need proper permissions and ACLs so brandon can access them
+    local arm_media_dirs=(
+        "$media_root/arm/raw"        # Raw disc backups during ripping
+        "$media_root/arm/transcode"  # Transcoding workspace
+        "$media_root/arm/completed"  # Completed rips before moving to final location
+        "$media_root/arm/movies"     # Additional output location
+    )
+
+    for dir in "${arm_media_dirs[@]}"; do
+        if [[ ! -d "$dir" ]]; then
+            mkdir -p "$dir"
+            report_log "success" "Created ARM media directory: $dir"
+        fi
+        # Always ensure correct ownership and permissions (775 = rwxrwxr-x)
+        chown "${puid}:${pgid}" "$dir" 2>/dev/null || true
+        chmod 775 "$dir" 2>/dev/null || true
+    done
+
     # Step 2: Set ownership
     report_progress 2 4 "Setting directory ownership (${puid}:${pgid})..."
 
@@ -121,49 +142,37 @@ main() {
 
     report_progress 3 4 "Configuration files ready" "complete"
 
-    # Step 4: Set comprehensive ACLs on ALL media directories
-    # This ensures files created by any process (ARM, Tdarr, etc.) automatically get correct permissions
-    report_progress 4 4 "Setting comprehensive media directory ACLs..."
+    # Step 4: Ensure media directory ownership
+    # Note: Complex ACL inheritance was removed - our custom arm-wrapper.sh now uses gosu
+    # to run the ripper as the arm user (UID 1000), so files are created with correct ownership.
+    report_progress 4 4 "Verifying media directory ownership..."
 
-    if command -v setfacl &> /dev/null; then
-        local acl_set=false
-        local acl_dirs=(
-            "$media_root"
-            "$media_root/movies"
-            "$media_root/tv"
-            "$media_root/music"
-            "$media_root/downloads"
-            "$media_root/downloads/complete"
-            "$media_root/downloads/incomplete"
-            "$media_root/downloads/watch"
-            "$media_root/transcode"
-            "$media_root/arm"
-        )
+    local media_dirs=(
+        "$media_root"
+        "$media_root/movies"
+        "$media_root/tv"
+        "$media_root/music"
+        "$media_root/downloads"
+        "$media_root/arm"
+    )
 
-        for dir in "${acl_dirs[@]}"; do
-            if [[ -d "$dir" ]]; then
-                # Set current ACLs (for existing files)
-                setfacl -R -m "u:${puid}:rwx" "$dir" 2>/dev/null && acl_set=true
-                setfacl -R -m "g:${pgid}:rwx" "$dir" 2>/dev/null || true
-
-                # Set default ACLs (for future files) - ensures inheritance!
-                setfacl -R -d -m "u:${puid}:rwx" "$dir" 2>/dev/null || true
-                setfacl -R -d -m "g:${pgid}:rwx" "$dir" 2>/dev/null || true
-                setfacl -R -d -m "mask::rwx" "$dir" 2>/dev/null || true
+    local fixed_count=0
+    for dir in "${media_dirs[@]}"; do
+        if [[ -d "$dir" ]]; then
+            # Fix ownership if not already correct
+            if [[ "$(stat -c '%u' "$dir" 2>/dev/null)" != "$puid" ]]; then
+                chown "${puid}:${pgid}" "$dir" 2>/dev/null && ((fixed_count++)) || true
             fi
-        done
-
-        if [[ "$acl_set" == "true" ]]; then
-            report_log "success" "Comprehensive ACLs set on all media directories"
-            report_log "info" "New files/directories will automatically inherit correct permissions"
-        else
-            report_log "info" "Media directories not found - ACLs will be set when storage is configured"
+            chmod 775 "$dir" 2>/dev/null || true
         fi
-        report_progress 4 4 "Media ACLs configured" "complete"
+    done
+
+    if [[ "$fixed_count" -gt 0 ]]; then
+        report_log "success" "Fixed ownership on $fixed_count media directories"
     else
-        report_log "warning" "setfacl not found - install 'acl' package for automatic permission handling"
-        report_progress 4 4 "ACL tools not available" "warning"
+        report_log "success" "All media directories have correct ownership"
     fi
+    report_progress 4 4 "Media directories ready" "complete"
 
     finish_progress "complete" "All directories created"
 
