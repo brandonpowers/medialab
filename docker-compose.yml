@@ -13,6 +13,26 @@ x-logging: &default-logging
     max-size: "10m"
     max-file: "3"
 
+# DNS configuration - applied to all containers
+# Pins external name resolution to the host's own upstream resolver (auto-detected
+# into DOCKER_DNS during setup, e.g. the LAN router). This bypasses the in-container
+# systemd-resolved hop (127.0.0.11 -> host 127.0.0.53) that can intermittently time
+# out and surface as 'EAI_AGAIN' / 503 lookup failures (e.g. Radarr -> TMDB).
+# Internal service discovery is unaffected - containers still resolve each other via
+# the embedded resolver at 127.0.0.11; only the upstream forwarder changes.
+# Falls back to 1.1.1.1 (Cloudflare) if DOCKER_DNS is unset/undetected.
+x-dns: &default-dns
+  - ${DOCKER_DNS:-1.1.1.1}
+x-dns-opt: &default-dns-opt
+  - single-request-reopen   # send A/AAAA on separate sockets; avoids a dropped
+                            # dual-query response, a common EAI_AGAIN cause
+
+# Resource caps (mem_limit / cpus) are applied to the heavy services below
+# (tdarr, arm, flaresolverr, qbittorrent, sabnzbd) so a single runaway container
+# — e.g. a stuck transcode or FlareSolverr's headless Chrome leaking memory —
+# cannot starve the host. They are generous ceilings, not reservations; raise
+# them if you have a large library and plenty of RAM/CPU.
+
 # Security hardening - applied to all containers
 # no-new-privileges: Prevents privilege escalation via setuid/setgid binaries
 # cap_drop ALL: Removes all Linux capabilities (principle of least privilege)
@@ -37,6 +57,8 @@ services:
   cloudflared:
     image: cloudflare/cloudflared:latest
     container_name: cloudflared
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     command: tunnel run
     environment:
@@ -52,6 +74,8 @@ services:
   homepage:
     image: ghcr.io/gethomepage/homepage:latest
     container_name: homepage
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "3000:3000"
@@ -60,7 +84,11 @@ services:
       - "${DOCKER_GID}"  # docker group for socket access
     environment:
       TZ: ${TZ}
-      HOMEPAGE_ALLOWED_HOSTS: "*"
+      # Restrict to the hosts this dashboard is actually reached by (generated
+      # during setup from localhost + LAN IP + hostname + domain). Defaults to
+      # localhost only rather than a wildcard. Edit HOMEPAGE_ALLOWED_HOSTS in
+      # .env if you access Homepage via a host not listed (e.g. a new LAN IP).
+      HOMEPAGE_ALLOWED_HOSTS: ${HOMEPAGE_ALLOWED_HOSTS:-localhost:3000}
       # API keys for service widgets (substituted into config via {{HOMEPAGE_VAR_*}})
       HOMEPAGE_VAR_JELLYFIN_API_KEY: ${JELLYFIN_API_KEY:-}
       HOMEPAGE_VAR_JELLYSEERR_API_KEY: ${JELLYSEERR_API_KEY:-}
@@ -81,6 +109,8 @@ services:
   jellyfin:
     image: jellyfin/jellyfin:latest
     container_name: jellyfin
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "8096:8096"
@@ -105,6 +135,8 @@ services:
   jellyseerr:
     image: fallenbagel/jellyseerr:latest
     container_name: jellyseerr
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "5055:5055"
@@ -112,6 +144,12 @@ services:
       <<: *common-env
     volumes:
       - ./data/jellyseerr/config:/app/config
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:5055/api/v1/status || wget -qO- http://localhost:5055/api/v1/status || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     <<: *default-security
     logging: *default-logging
 
@@ -123,6 +161,8 @@ services:
   sonarr:
     image: lscr.io/linuxserver/sonarr:latest
     container_name: sonarr
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "8989:8989"
@@ -142,6 +182,8 @@ services:
   radarr:
     image: lscr.io/linuxserver/radarr:latest
     container_name: radarr
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "7878:7878"
@@ -161,6 +203,8 @@ services:
   lidarr:
     image: lscr.io/linuxserver/lidarr:latest
     container_name: lidarr
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "8686:8686"
@@ -169,12 +213,20 @@ services:
     volumes:
       - ./data/lidarr/config:/config
       - *common-vol
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8686/ping"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     <<: *default-security
     logging: *default-logging
 
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
     container_name: prowlarr
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "9696:9696"
@@ -194,6 +246,8 @@ services:
   flaresolverr:
     image: ghcr.io/flaresolverr/flaresolverr:latest
     container_name: flaresolverr
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "8191:8191"
@@ -202,12 +256,22 @@ services:
       LOG_HTML: false
       CAPTCHA_SOLVER: none
       TZ: ${TZ}
+    mem_limit: 1g
+    cpus: "2"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8191/health || wget -qO- http://localhost:8191/health || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
     <<: *default-security
     logging: *default-logging
 
   bazarr:
     image: lscr.io/linuxserver/bazarr:latest
     container_name: bazarr
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "6767:6767"
@@ -216,12 +280,20 @@ services:
     volumes:
       - ./data/bazarr/config:/config
       - *common-vol
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6767/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     <<: *default-security
     logging: *default-logging
 
   recyclarr:
     image: ghcr.io/recyclarr/recyclarr:latest
     container_name: recyclarr
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     user: ${PUID}:${PGID}
     environment:
@@ -234,6 +306,8 @@ services:
   qbittorrent:
     image: lscr.io/linuxserver/qbittorrent:latest
     container_name: qbittorrent
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "8080:8080"
@@ -246,12 +320,22 @@ services:
       - ./data/qbittorrent/config:/config
       - ${MEDIA_ROOT}/downloads:/downloads
       - *common-vol
+    mem_limit: 2g
+    cpus: "4"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     <<: *default-security
     logging: *default-logging
 
   sabnzbd:
     image: lscr.io/linuxserver/sabnzbd:latest
     container_name: sabnzbd
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "8085:8080"
@@ -261,12 +345,22 @@ services:
       - ./data/sabnzbd/config:/config
       - ${MEDIA_ROOT}/downloads:/downloads
       - *common-vol
+    mem_limit: 2g
+    cpus: "4"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api?mode=version"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
     <<: *default-security
     logging: *default-logging
 
   tdarr:
     image: ghcr.io/haveagitgat/tdarr:latest
     container_name: tdarr
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     ports:
       - "8265:8265"  # Web UI
@@ -292,12 +386,22 @@ services:
       - ./data/tdarr/logs:/app/logs
       - ./data/tdarr/temp:/temp
       - ${MEDIA_ROOT}:/media  # Read-write for transcoding ARM rips
+    mem_limit: 6g
+    cpus: "6"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8265/ || wget -qO- http://localhost:8265/ || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
     <<: *default-security
     logging: *default-logging
 
   arm:
     image: automaticrippingmachine/automatic-ripping-machine:latest
     container_name: arm
+    dns: *default-dns
+    dns_opt: *default-dns-opt
     restart: unless-stopped
     privileged: true  # Required for full optical drive access and udev integration
     ports:
@@ -318,6 +422,8 @@ services:
       - ${MEDIA_ROOT}/arm:/home/arm/media  # Temporary storage during ripping (on external drive)
       - ${MEDIA_ROOT}:/home/arm/movies  # Final output (ARM adds movies/ or tv/ subfolder)
       - /run/udev:/run/udev:ro  # udev events for automatic disc detection
+    mem_limit: 4g
+    cpus: "4"
     # Override default healthcheck - udevd check fails in container (udev events come from host)
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://$(hostname -i):8080 || exit 1"]

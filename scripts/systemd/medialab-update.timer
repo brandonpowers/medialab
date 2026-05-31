@@ -1,0 +1,12 @@
+[Unit]
+Description=Run Medialab Auto-Update weekly
+
+[Timer]
+# Run at 4:00 AM every Sunday. update.sh snapshots config first and runs a
+# health check after, so a bad :latest image can be rolled back with restore.sh.
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=1800
+
+[Install]
+WantedBy=timers.target

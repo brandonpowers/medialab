@@ -125,3 +125,21 @@ generate_hex() {
     local length="${1:-32}"
     openssl rand -hex "$length"
 }
+
+# Check that a password meets the minimum strength policy.
+# Returns 0 if acceptable; otherwise returns 1 and prints the reason to stdout.
+# The 8-character floor matches the web wizard's client-side validation so a
+# password accepted by the UI is never rejected by the backend.
+PASSWORD_MIN_LENGTH="${PASSWORD_MIN_LENGTH:-8}"
+check_password_strength() {
+    local password="$1"
+    if [[ -z "$password" ]]; then
+        echo "Password must not be empty."
+        return 1
+    fi
+    if (( ${#password} < PASSWORD_MIN_LENGTH )); then
+        echo "Password must be at least ${PASSWORD_MIN_LENGTH} characters (got ${#password})."
+        return 1
+    fi
+    return 0
+}

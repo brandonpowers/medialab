@@ -16,26 +16,31 @@ crontab -e
 ```
 
 ### 2. Configure Automated Backups
-Protect your configuration:
+Protect your configuration. Medialab ships a backup helper that snapshots your
+service configs (`./data`), `.env`, and the compose/recyclarr config (your media
+library under `MEDIA_ROOT` is excluded — it's far too large to tar):
 
 ```bash
-#!/bin/bash
-# /opt/medialab/backup.sh
+# Create a snapshot now (writes to ./backups by default)
+./scripts/utilities/backup.sh
 
-BACKUP_DIR="/mnt/media/backups"
-DATE=$(date +%Y%m%d_%H%M%S)
-
-cd /opt/medialab
-tar -czf "$BACKUP_DIR/medialab-config-$DATE.tar.gz" \
-    ./data .env docker-compose.yml recyclarr.yml
-
-# Keep only last 30 days
-find "$BACKUP_DIR" -name "medialab-config-*.tar.gz" -mtime +30 -delete
+# Or choose a destination (e.g. a separate drive)
+./scripts/utilities/backup.sh /mnt/media/backups
 ```
 
-Run daily via cron:
+Snapshots are written with mode 600 because they contain secrets. Restore one
+with:
+
 ```bash
-0 2 * * * /opt/medialab/backup.sh
+./scripts/utilities/restore.sh ./backups/medialab-backup-YYYYmmdd-HHMMSS.tar.gz
+```
+
+`update.sh` automatically takes a snapshot before pulling new images, so a bad
+update can always be rolled back. To back up on a schedule, run the helper from
+cron (keep only the last 30 days):
+
+```bash
+0 2 * * * cd /opt/medialab && ./scripts/utilities/backup.sh /mnt/media/backups && find /mnt/media/backups -name 'medialab-backup-*.tar.gz' -mtime +30 -delete
 ```
 
 ## User Experience Enhancements
