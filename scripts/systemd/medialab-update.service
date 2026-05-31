@@ -1,20 +1,21 @@
 [Unit]
-Description=Medialab Cleanup Service
-After=docker.service
+Description=Medialab Auto-Update Service
+After=docker.service network-online.target
 Requires=docker.service
+Wants=network-online.target
 
 # NOTE: __MEDIALAB_ROOT__ is a placeholder. Do not install this file directly;
 # run install-timers.sh, which substitutes the actual repo path at install time.
 [Service]
 Type=oneshot
-ExecStart=__MEDIALAB_ROOT__/scripts/utilities/cleanup.sh
+ExecStart=__MEDIALAB_ROOT__/scripts/utilities/update.sh
 User=root
 WorkingDirectory=__MEDIALAB_ROOT__
 
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=medialab-cleanup
+SyslogIdentifier=medialab-update
 
 [Install]
 WantedBy=multi-user.target

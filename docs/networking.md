@@ -199,6 +199,52 @@ Example: Require login before accessing Jellyseerr
 
 ---
 
+## Container DNS
+
+Containers resolve **external** names (TMDB, indexers, usenet/torrent hosts)
+through Docker's embedded resolver at `127.0.0.11`, which forwards to an upstream
+resolver. On hosts running **systemd-resolved**, the host's `/etc/resolv.conf`
+points at a loopback stub (`127.0.0.53`) that Docker cannot use directly inside a
+container, so it forwards through systemd-resolved instead. That extra hop can
+intermittently time out and surface as `getaddrinfo EAI_AGAIN` / `503` failures —
+e.g. a Radarr → TMDB lookup failing and a Jellyseerr request silently going to
+`FAILED`.
+
+To avoid this, setup auto-detects the host's **own** upstream resolver (typically
+your LAN router) and writes it to `DOCKER_DNS` in `.env`. `docker-compose.yml`
+pins every container's `dns:` to it, so external lookups take the same path the
+host already uses — **no new third-party resolver is introduced**. If detection
+fails, containers fall back to `1.1.1.1`. Each container also sets
+`dns_opt: single-request-reopen`, which sends the A and AAAA queries on separate
+sockets and avoids a dropped dual-query response (another common `EAI_AGAIN`
+cause).
+
+Internal service discovery is unaffected: containers still resolve each other
+(`sonarr` → `radarr`, etc.) via `127.0.0.11`; only the upstream forwarder for
+external names changes.
+
+```bash
+# Detected value
+grep DOCKER_DNS .env
+
+# Verify resolution from inside a container
+docker compose exec radarr getent hosts api.themoviedb.org   # external
+docker compose exec radarr getent hosts sonarr               # internal (peer)
+
+# health-check.sh also probes external DNS and fails loudly if it breaks
+./scripts/utilities/health-check.sh
+```
+
+**Override:** if your upstream resolver is itself unreliable, set
+`DOCKER_DNS=1.1.1.1` (or `8.8.8.8`) in `.env` and run `docker compose up -d`.
+
+> **Privacy note:** Docker's `dns:` uses plaintext UDP/53, so pointing at a public
+> resolver does **not** hide queries from your ISP (it only adds the public
+> resolver as an observer). DNS choice also has little effect on torrent/usenet
+> exposure — those connections are visible at the IP level regardless. To actually
+> shield download activity, route the download clients through a VPN (see
+> `docs/future-enhancements.md`), which is independent of this DNS setting.
+
 ## Troubleshooting
 
 ### Cloudflare Tunnel Issues

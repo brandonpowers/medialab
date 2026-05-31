@@ -7,30 +7,28 @@
 #   file=/tmp/medialab-progress-12345
 #
 
+# Shared CGI helpers (CSRF guard, progress-file validation). Reject untrusted
+# requests BEFORE emitting any headers.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+source "$SCRIPT_DIR/cgi-common.sh"
+cgi_guard
+
 # Set SSE content type
 echo "Content-Type: text/event-stream"
 echo "Cache-Control: no-cache"
 echo "Connection: keep-alive"
 echo ""
 
-# Parse query string
-parse_query() {
-    local query="$QUERY_STRING"
-    local key value
+# Extract only the `file` parameter, with a strict character class. We do NOT
+# assign arbitrary query-string keys to shell variables.
+progress_file=""
+if [[ -n "${QUERY_STRING:-}" ]]; then
+    progress_file=$(echo "$QUERY_STRING" | grep -oP '(^|&)file=\K[A-Za-z0-9._/-]+' | head -n1 || true)
+fi
 
-    while IFS='=' read -r -d '&' key value; do
-        [[ -z "$key" ]] && continue
-        key=$(echo "$key" | sed 's/+/ /g; s/%/\\x/g')
-        value=$(echo "$value" | sed 's/+/ /g; s/%/\\x/g')
-        printf -v "$key" '%b' "$value"
-    done <<< "${query}&"
-}
-
-parse_query
-
-progress_file="${file:-}"
-
-if [[ -z "$progress_file" || ! -f "$progress_file" ]]; then
+# Only stream wizard-owned progress files. This blocks reading arbitrary files
+# (e.g. the mounted .env) via a crafted `file=` parameter.
+if ! wizard_is_valid_progress_file "$progress_file" || [[ ! -f "$progress_file" ]]; then
     echo "event: error"
     echo "data: {\"error\": \"Progress file not found\"}"
     echo ""

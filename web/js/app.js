@@ -1398,6 +1398,15 @@ async function runConfiguration() {
         progressBar.classList.add('success');
         logOutput.textContent += '\n[' + new Date().toLocaleTimeString() + '] Configuration completed successfully!\n';
     }
+
+    // Security reminder: the wizard has read-write access to .env and the Docker
+    // socket and should not be left running once setup is done.
+    logOutput.textContent +=
+        '\n[SECURITY] Setup is finished — shut down this wizard now.\n' +
+        '           Press Ctrl+C in the terminal running ./scripts/run-ui.sh, or run:\n' +
+        '           docker compose -f docker-compose.web.yml down\n';
+    document.getElementById('configure-log-card').classList.remove('hidden');
+    logOutput.scrollTop = logOutput.scrollHeight;
 }
 
 async function runConfigModuleWithSSE(module, logOutput) {

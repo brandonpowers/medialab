@@ -360,6 +360,75 @@ detect_hostname() {
 }
 
 # ============================================
+# NETWORK / DNS DETECTION
+# ============================================
+
+# Return true if the given address is a loopback address (127.0.0.0/8 or ::1).
+# Used to skip stub resolvers (e.g. systemd-resolved's 127.0.0.53) that are
+# meaningless inside a container network namespace.
+_is_loopback_addr() {
+    local addr="$1"
+    [[ "$addr" == 127.* || "$addr" == "::1" ]]
+}
+
+# Auto-detect the host's upstream DNS resolver for Docker containers to forward
+# external lookups to. Pinning this in docker-compose.yml bypasses the
+# in-container systemd-resolved hop (127.0.0.11 -> 127.0.0.53) that can
+# intermittently time out and surface as 'EAI_AGAIN' / 503 lookup failures.
+#
+# Prefers the host's *own* upstream (e.g. the LAN router), so container DNS
+# takes the same path the host already uses - no new third-party resolver.
+# Returns the first non-loopback nameserver, or empty if none can be determined
+# (callers/compose then apply a public fallback).
+detect_upstream_dns() {
+    local dns="" addr
+
+    # Method 1: systemd-resolved's real upstreams (skips the 127.0.0.53 stub)
+    if [[ -r /run/systemd/resolve/resolv.conf ]]; then
+        while read -r _ addr _; do
+            if [[ -n "$addr" ]] && ! _is_loopback_addr "$addr"; then
+                dns="$addr"; break
+            fi
+        done < <(grep -E '^nameserver[[:space:]]' /run/systemd/resolve/resolv.conf 2>/dev/null)
+    fi
+
+    # Method 2: resolvectl's current DNS server
+    if [[ -z "$dns" ]] && command_exists resolvectl; then
+        addr=$(resolvectl status 2>/dev/null \
+            | grep -iE 'current dns server|dns servers' \
+            | grep -oE '([0-9]{1,3}\.){3}[0-9]{1,3}|([0-9a-fA-F]*:){2,}[0-9a-fA-F]*' \
+            | head -n1 || true)
+        if [[ -n "$addr" ]] && ! _is_loopback_addr "$addr"; then
+            dns="$addr"
+        fi
+    fi
+
+    # Method 3: /etc/resolv.conf, skipping loopback stubs (e.g. 127.0.0.53)
+    if [[ -z "$dns" ]] && [[ -r /etc/resolv.conf ]]; then
+        while read -r _ addr _; do
+            if [[ -n "$addr" ]] && ! _is_loopback_addr "$addr"; then
+                dns="$addr"; break
+            fi
+        done < <(grep -E '^nameserver[[:space:]]' /etc/resolv.conf 2>/dev/null)
+    fi
+
+    # Method 4: default gateway (typically the LAN router, which also serves DNS)
+    if [[ -z "$dns" ]] && command_exists ip; then
+        addr=$(ip route show default 2>/dev/null | awk '{print $3; exit}')
+        if [[ -n "$addr" ]] && ! _is_loopback_addr "$addr"; then
+            dns="$addr"
+        fi
+    fi
+
+    # Only return values that look like an IPv4/IPv6 address; otherwise empty.
+    if [[ "$dns" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ || "$dns" =~ : ]]; then
+        echo "$dns"
+    else
+        echo ""
+    fi
+}
+
+# ============================================
 # COMBINED HARDWARE DETECTION
 # ============================================
 

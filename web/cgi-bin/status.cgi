@@ -7,15 +7,20 @@
 #   check_pid=<pid>  - Check if a specific process is running
 #
 
+# Determine PROJECT_ROOT / SCRIPT_DIR (CGI may not inherit env vars)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -z "$PROJECT_ROOT" ]]; then
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
+
+# Shared CGI helpers (CSRF guard, PID registry). Reject untrusted requests
+# BEFORE emitting any headers or doing any work.
+source "$SCRIPT_DIR/cgi-common.sh"
+cgi_guard
+
 # Set content type
 echo "Content-Type: application/json"
 echo ""
-
-# Determine PROJECT_ROOT if not set (CGI may not inherit env vars)
-if [[ -z "$PROJECT_ROOT" ]]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-fi
 
 # Source library
 source "$PROJECT_ROOT/scripts/lib/init.sh"
@@ -28,8 +33,14 @@ if [[ -n "$QUERY_STRING" ]]; then
     kill_pid=$(echo "$QUERY_STRING" | grep -oP 'kill_pid=\K\d+' || true)
 fi
 
-# If kill_pid is requested, kill that process
+# If kill_pid is requested, kill that process — but ONLY if the wizard itself
+# spawned it. This prevents the endpoint from being used (e.g. via CSRF) to
+# kill arbitrary processes on the host.
 if [[ -n "$kill_pid" ]]; then
+    if ! wizard_pid_is_registered "$kill_pid"; then
+        echo '{"killed": false, "pid": '"$kill_pid"', "message": "Not a wizard-managed process"}'
+        exit 0
+    fi
     if kill -0 "$kill_pid" 2>/dev/null; then
         # Kill the process and its children
         pkill -P "$kill_pid" 2>/dev/null || true
@@ -38,8 +49,10 @@ if [[ -n "$kill_pid" ]]; then
         if kill -0 "$kill_pid" 2>/dev/null; then
             kill -9 "$kill_pid" 2>/dev/null || true
         fi
+        wizard_unregister_pid "$kill_pid"
         echo '{"killed": true, "pid": '"$kill_pid"'}'
     else
+        wizard_unregister_pid "$kill_pid"
         echo '{"killed": false, "pid": '"$kill_pid"', "message": "Process not found"}'
     fi
     exit 0

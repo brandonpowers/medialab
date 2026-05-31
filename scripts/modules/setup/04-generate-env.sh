@@ -101,8 +101,33 @@ main() {
         admin_user=${admin_user:-admin}
     fi
     if [[ -z "$admin_pass" && "$OUTPUT_MODE" != "json" && -t 0 ]]; then
-        read -r -s -p "Admin password: " admin_pass
-        echo ""
+        # Require a password that meets the strength policy, entered twice.
+        local pw_reason admin_pass_confirm
+        while true; do
+            read -r -s -p "Admin password (min ${PASSWORD_MIN_LENGTH} chars): " admin_pass
+            echo ""
+            if ! pw_reason=$(check_password_strength "$admin_pass"); then
+                print_warning "$pw_reason"
+                continue
+            fi
+            read -r -s -p "Confirm password: " admin_pass_confirm
+            echo ""
+            if [[ "$admin_pass" != "$admin_pass_confirm" ]]; then
+                print_warning "Passwords did not match - please try again."
+                continue
+            fi
+            break
+        done
+    fi
+
+    # Server-side guard: in non-interactive/JSON mode the password comes from the
+    # web wizard (which validates client-side) or a prior .env. Warn loudly if a
+    # weak/empty value slips through rather than silently accepting it.
+    if [[ -n "${admin_pass:-}" ]]; then
+        local pw_reason_ni
+        if ! pw_reason_ni=$(check_password_strength "$admin_pass"); then
+            report_log "warning" "Weak admin password: $pw_reason_ni"
+        fi
     fi
     if [[ -z "$admin_email" && "$OUTPUT_MODE" != "json" && -t 0 ]]; then
         read -r -p "Admin email (optional): " admin_email
@@ -189,6 +214,20 @@ main() {
         report_log "success" "Docker GID: $docker_gid"
     else
         report_log "warning" "Docker group not found - Homepage container status may not work"
+    fi
+
+    # Upstream DNS for containers. Pinning the host's own upstream resolver in
+    # docker-compose.yml bypasses the in-container systemd-resolved hop that can
+    # cause intermittent EAI_AGAIN / 503 lookup failures (e.g. Radarr -> TMDB).
+    local docker_dns
+    docker_dns=$(get_config_value "system.dns" "")
+    [[ -z "$docker_dns" ]] && docker_dns=$(get_env_value "DOCKER_DNS" "$env_file")
+    [[ -z "$docker_dns" ]] && docker_dns=$(detect_upstream_dns)
+    set_env_value "DOCKER_DNS" "$docker_dns" "false" "$env_file" || true
+    if [[ -n "$docker_dns" ]]; then
+        report_log "success" "Docker upstream DNS: $docker_dns"
+    else
+        report_log "info" "Upstream DNS not detected - containers will use public fallback (1.1.1.1)"
     fi
 
     report_progress 2 7 "System settings configured" "complete"
@@ -345,6 +384,19 @@ main() {
     fi
 
     report_progress 6 7 "Remote access configured" "complete"
+
+    # Homepage allowed hosts: build the list of hosts the dashboard is actually
+    # reached by, instead of a wildcard. Covers localhost, the LAN IP, the
+    # machine hostname (and .local), and the public domain when configured.
+    local hp_hosts="localhost:3000,127.0.0.1:3000"
+    local lan_ip host_short
+    lan_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+    [[ -n "$lan_ip" ]] && hp_hosts+=",${lan_ip}:3000"
+    host_short=$(hostname 2>/dev/null || true)
+    [[ -n "$host_short" ]] && hp_hosts+=",${host_short}:3000,${host_short}.local:3000"
+    [[ -n "${domain:-}" ]] && hp_hosts+=",${domain}"
+    set_env_value "HOMEPAGE_ALLOWED_HOSTS" "$hp_hosts" "false" "$env_file" || true
+    report_log "success" "Homepage allowed hosts: $hp_hosts"
 
     # Step 7: Finalize
     report_progress 7 7 "Finalizing configuration..."

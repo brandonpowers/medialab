@@ -1,13 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Resolve the repo root from this script's location so the tool works whether
+# Medialab is installed at /opt/medialab or cloned anywhere else.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+
+# Read MEDIA_ROOT from .env so cleanup targets the user's actual media drive
+# (not a hardcoded /mnt/media). Falls back to the project default.
+MEDIA_ROOT="$(grep -E '^MEDIA_ROOT=' "$REPO_ROOT/.env" 2>/dev/null | tail -1 | cut -d= -f2- | tr -d "\"'" || true)"
+MEDIA_ROOT="${MEDIA_ROOT:-/mnt/media}"
+
 # Configuration
-ARM_DB="/opt/medialab/data/arm/home/db/arm.db"
+ARM_DB="$REPO_ROOT/data/arm/home/db/arm.db"
 STUCK_JOB_HOURS=24  # Jobs running longer than this are considered stuck
 RAW_SIZE_LIMIT_GB=100  # Raw folders larger than this likely indicate copy protection issues
 
+cd "$REPO_ROOT"
+
 echo "[*] Medialab Cleanup Script"
 echo "=========================="
+echo "    Media root: $MEDIA_ROOT"
 echo ""
 
 # Clean Docker system
@@ -16,11 +29,11 @@ docker system prune -af --filter "until=72h"
 
 echo ""
 echo "[2/10] Cleaning old completed downloads (older than 14 days)..."
-if [ -d /mnt/media/downloads/complete ]; then
-  find /mnt/media/downloads/complete -type f -mtime +14 -delete 2>/dev/null || true
+if [ -d "$MEDIA_ROOT/downloads/complete" ]; then
+  find "$MEDIA_ROOT/downloads/complete" -type f -mtime +14 -delete 2>/dev/null || true
   echo "  [✓] Cleaned old downloads"
 else
-  echo "  [!] /mnt/media/downloads/complete not found, skipping"
+  echo "  [!] $MEDIA_ROOT/downloads/complete not found, skipping"
 fi
 
 echo ""
@@ -34,36 +47,36 @@ fi
 
 echo ""
 echo "[4/10] Cleaning ARM empty transcode directories..."
-if [ -d /mnt/media/arm/transcode ]; then
-  empty_count=$(find /mnt/media/arm/transcode -type d -empty 2>/dev/null | wc -l)
+if [ -d "$MEDIA_ROOT/arm/transcode" ]; then
+  empty_count=$(find "$MEDIA_ROOT/arm/transcode" -type d -empty 2>/dev/null | wc -l)
   if [ "$empty_count" -gt 0 ]; then
-    find /mnt/media/arm/transcode -type d -empty -delete 2>/dev/null || true
+    find "$MEDIA_ROOT/arm/transcode" -type d -empty -delete 2>/dev/null || true
     echo "  [✓] Removed $empty_count empty transcode directories"
   else
     echo "  [✓] No empty transcode directories"
   fi
 else
-  echo "  [!] /mnt/media/arm/transcode not found, skipping"
+  echo "  [!] $MEDIA_ROOT/arm/transcode not found, skipping"
 fi
 
 echo ""
 echo "[5/10] Checking ARM raw directory for stuck files (older than 7 days)..."
-if [ -d /mnt/media/arm/raw ]; then
-  stuck_files=$(find /mnt/media/arm/raw -type f -mtime +7 2>/dev/null | wc -l)
+if [ -d "$MEDIA_ROOT/arm/raw" ]; then
+  stuck_files=$(find "$MEDIA_ROOT/arm/raw" -type f -mtime +7 2>/dev/null | wc -l)
   if [ "$stuck_files" -gt 0 ]; then
     echo "  [!] Found $stuck_files files older than 7 days in raw directory"
     echo "      These may be stuck rips - review manually:"
-    find /mnt/media/arm/raw -type f -mtime +7 -exec ls -lh {} \; 2>/dev/null | head -10
+    find "$MEDIA_ROOT/arm/raw" -type f -mtime +7 -exec ls -lh {} \; 2>/dev/null | head -10
   else
     echo "  [✓] No stuck files in raw directory"
   fi
 else
-  echo "  [!] /mnt/media/arm/raw not found, skipping"
+  echo "  [!] $MEDIA_ROOT/arm/raw not found, skipping"
 fi
 
 echo ""
 echo "[6/10] Checking for oversized ARM raw folders (copy protection)..."
-if [ -d /mnt/media/arm/raw ]; then
+if [ -d "$MEDIA_ROOT/arm/raw" ]; then
   oversized_found=false
   while IFS= read -r dir; do
     if [ -n "$dir" ]; then
@@ -79,13 +92,13 @@ if [ -d /mnt/media/arm/raw ]; then
         echo "      Run: rm -rf \"$dir\" to clean up"
       fi
     fi
-  done < <(find /mnt/media/arm/raw -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
+  done < <(find "$MEDIA_ROOT/arm/raw" -mindepth 1 -maxdepth 1 -type d 2>/dev/null)
 
   if ! $oversized_found; then
     echo "  [✓] No oversized raw folders found"
   fi
 else
-  echo "  [!] /mnt/media/arm/raw not found, skipping"
+  echo "  [!] $MEDIA_ROOT/arm/raw not found, skipping"
 fi
 
 echo ""
@@ -140,16 +153,16 @@ fi
 
 echo ""
 echo "[9/10] Cleaning ARM empty raw directories (from failed rips)..."
-if [ -d /mnt/media/arm/raw ]; then
-  empty_count=$(find /mnt/media/arm/raw -maxdepth 1 -type d -empty 2>/dev/null | wc -l)
+if [ -d "$MEDIA_ROOT/arm/raw" ]; then
+  empty_count=$(find "$MEDIA_ROOT/arm/raw" -maxdepth 1 -type d -empty 2>/dev/null | wc -l)
   if [ "$empty_count" -gt 0 ]; then
-    find /mnt/media/arm/raw -maxdepth 1 -type d -empty -delete 2>/dev/null || true
+    find "$MEDIA_ROOT/arm/raw" -maxdepth 1 -type d -empty -delete 2>/dev/null || true
     echo "  [✓] Removed $empty_count empty raw directories"
   else
     echo "  [✓] No empty raw directories"
   fi
 else
-  echo "  [!] /mnt/media/arm/raw not found, skipping"
+  echo "  [!] $MEDIA_ROOT/arm/raw not found, skipping"
 fi
 
 echo ""
@@ -170,4 +183,4 @@ echo ""
 echo "[✓] Cleanup complete!"
 echo ""
 echo "Disk usage:"
-df -h /opt /mnt/media 2>/dev/null || df -h /
+df -h "$REPO_ROOT" "$MEDIA_ROOT" 2>/dev/null || df -h /

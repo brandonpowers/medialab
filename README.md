@@ -88,6 +88,14 @@ Then open http://localhost:8000 in your browser. The wizard walks you through:
 3. Configuration options
 4. Automated installation with real-time progress
 
+> **⚠️ The wizard is a setup-time-only tool.** It has read-write access to your
+> `.env` and (in the container variant) the Docker socket. It binds to
+> `127.0.0.1` and its endpoints enforce an Origin/Host check, but you should
+> still **shut it down once setup is complete** — press `Ctrl+C` if you launched
+> it with `run-ui.sh`, or run `docker compose -f docker-compose.web.yml down` if
+> you started the container. Do not leave it running during normal operation or
+> expose it beyond localhost.
+
 For detailed information about automated configuration, see **[Automated Configuration Guide](docs/automated-configuration.md)**
 
 ## Service Documentation
@@ -221,27 +229,37 @@ docker compose run --rm recyclarr sync
 
 ### Backups
 
-Important directories to backup:
-- `./data/` - All service configurations and databases
-- `.env` - Your environment configuration
-- `docker-compose.yml` - Service definitions
-- `config/recyclarr.yml` - Quality profile configuration
+Use the bundled helper to snapshot your service configs (`./data`), `.env`, and
+the compose/recyclarr config. Your media library (under `MEDIA_ROOT`) is
+intentionally excluded — it's far too large to tar.
 
 ```bash
-# Create backup
-tar -czf medialab-backup-$(date +%Y%m%d).tar.gz ./data .env docker-compose.yml config/
+# Create a snapshot now (writes to ./backups by default)
+./scripts/utilities/backup.sh
+
+# ...or to a specific destination (e.g. a separate drive)
+./scripts/utilities/backup.sh /mnt/media/backups
+
+# Restore a snapshot (stop the stack first: docker compose down)
+./scripts/utilities/restore.sh ./backups/medialab-backup-YYYYmmdd-HHMMSS.tar.gz
 ```
+
+Snapshots contain secrets and are written with mode `600`. They are gitignored.
 
 ### Updates
 
-Stay up to date with:
+Use the bundled helper. It takes a configuration snapshot **before** pulling new
+images (so a bad `:latest` image can be rolled back), recreates the containers,
+and verifies service health afterward:
 
 ```bash
-cd /opt/medialab
-git pull
-docker compose pull
-docker compose up -d
+git pull                            # update the repo itself (optional)
+./scripts/utilities/update.sh       # snapshot → pull → recreate → health check
 ```
+
+Pass `--no-backup` to skip the pre-update snapshot (not recommended). If a
+service is unhealthy after an update, restore the snapshot the script just took
+with `./scripts/utilities/restore.sh <backup>`.
 
 ## Requirements
 

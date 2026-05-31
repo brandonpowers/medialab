@@ -3,6 +3,10 @@
 .env.backup*
 data/
 
+# config snapshots from backup.sh (contain .env / secrets)
+backups/
+medialab-backup-*.tar.gz
+
 # docker leftovers
 **/.DS_Store
 **/*.log

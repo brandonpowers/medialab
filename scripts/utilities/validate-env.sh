@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-cd /opt/medialab
+# Resolve the repo root from this script's location so it works whether
+# Medialab is installed at /opt/medialab or cloned anywhere else.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 echo "[*] Environment Configuration Validator"
 echo "========================================"

@@ -19,7 +19,9 @@ services:
         python -m http.server 8000 --cgi
       "
     ports:
-      - "127.0.0.1:8000:8000"  # Local only for security
+      - "127.0.0.1:8000:8000"  # Local only. CGI endpoints also enforce an
+                               # Origin/Host check (see web/cgi-bin/cgi-common.sh)
+                               # to resist CSRF / DNS-rebinding from the browser.
     volumes:
       - ./web:/app:ro
       - ./scripts:/app/scripts:ro
@@ -28,11 +30,22 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - MEDIALAB_ROOT=/app
+      # Hosts the wizard answers to. Change if you alter the published port/bind.
+      - MEDIALAB_UI_ALLOWED_HOSTS=127.0.0.1:8000 localhost:8000
     restart: unless-stopped
     labels:
       - "com.medialab.description=Setup Wizard Web UI"
 
-# Note: For production use, consider:
-# 1. Adding authentication
-# 2. Using a reverse proxy with HTTPS
-# 3. Restricting Docker socket access
+# SECURITY: This wizard is a SETUP-TIME-ONLY tool. It has read-write access to
+# .env and the Docker socket, so it must NOT be left running in normal
+# operation. Tear it down once setup/configuration is complete:
+#
+#     docker compose -f docker-compose.web.yml down
+#
+# Hardening already applied:
+#   - Bound to 127.0.0.1 only
+#   - CGI endpoints enforce an Origin/Host allowlist (CSRF / DNS-rebinding)
+#   - Module execution is restricted to a directory-derived allowlist
+#   - The process-kill endpoint only acts on wizard-spawned PIDs
+#   - The progress stream only exposes wizard-owned files
+# Still recommended for hostile networks: front with a reverse proxy + auth/HTTPS.

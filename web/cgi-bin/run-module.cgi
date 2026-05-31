@@ -11,33 +11,61 @@
 #   JSON config object that will be saved and passed to modules
 #
 
+# Determine PROJECT_ROOT / SCRIPT_DIR (CGI may not inherit env vars)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -z "$PROJECT_ROOT" ]]; then
+    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+fi
+
+# Shared CGI helpers (CSRF guard, PID registry). Reject untrusted requests
+# BEFORE emitting any headers or doing any work.
+source "$SCRIPT_DIR/cgi-common.sh"
+cgi_guard
+
 # Set content type
 echo "Content-Type: application/json"
 echo ""
 
-# Determine PROJECT_ROOT if not set (CGI may not inherit env vars)
-if [[ -z "$PROJECT_ROOT" ]]; then
-    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
-fi
-
 # Source library
 source "$PROJECT_ROOT/scripts/lib/init.sh"
 
-# Parse query string
-parse_query() {
-    local query="$QUERY_STRING"
-    local key value
+# Parse only the parameters we expect, with a strict character class. We do NOT
+# assign arbitrary query-string keys to shell variables (the previous
+# `printf -v "$key"` approach let a caller clobber PROJECT_ROOT, PATH, etc.).
+phase=""
+module=""
+if [[ -n "${QUERY_STRING:-}" ]]; then
+    phase=$(echo "$QUERY_STRING"  | grep -oP '(^|&)phase=\K[a-z]+'            | head -n1 || true)
+    module=$(echo "$QUERY_STRING" | grep -oP '(^|&)module=\K[A-Za-z0-9._-]+'  | head -n1 || true)
+fi
 
-    while IFS='=' read -r -d '&' key value; do
-        [[ -z "$key" ]] && continue
-        key=$(echo "$key" | sed 's/+/ /g; s/%/\\x/g')
-        value=$(echo "$value" | sed 's/+/ /g; s/%/\\x/g')
-        printf -v "$key" '%b' "$value"
-    done <<< "${query}&"
-}
+if [[ -z "$phase" || -z "$module" ]]; then
+    echo '{"status": "error", "message": "Missing phase or module parameter"}'
+    exit 0
+fi
 
-parse_query
+# Resolve the module directory for the requested phase.
+case "$phase" in
+    setup)     module_dir="$PROJECT_ROOT/scripts/modules/setup" ;;
+    configure) module_dir="$PROJECT_ROOT/scripts/modules/configure" ;;
+    *)
+        echo '{"status": "error", "message": "Invalid phase"}'
+        exit 0
+        ;;
+esac
+
+# Validate `module` against the actual module files on disk (an allowlist that
+# maintains itself). This rejects path traversal and any name that is not a
+# real, top-level module in the requested phase.
+module_path=""
+if [[ "$module" != *"/"* && "$module" != *".."* && -f "$module_dir/${module}.sh" ]]; then
+    module_path="$module_dir/${module}.sh"
+fi
+
+if [[ -z "$module_path" ]]; then
+    echo "{\"status\": \"error\", \"message\": \"Unknown module: $module\"}"
+    exit 0
+fi
 
 # Read POST body if present (config JSON)
 CONFIG_FILE=""
@@ -46,36 +74,8 @@ if [[ "${REQUEST_METHOD:-}" == "POST" && -n "${CONTENT_LENGTH:-}" && "$CONTENT_L
     head -c "$CONTENT_LENGTH" > "$CONFIG_FILE"
 fi
 
-# Validate parameters
-phase="${phase:-}"
-module="${module:-}"
-
-if [[ -z "$phase" || -z "$module" ]]; then
-    echo '{"status": "error", "message": "Missing phase or module parameter"}'
-    exit 0
-fi
-
-# Determine module path
-case "$phase" in
-    setup)
-        module_path="$PROJECT_ROOT/scripts/modules/setup/${module}.sh"
-        ;;
-    configure)
-        module_path="$PROJECT_ROOT/scripts/modules/configure/${module}.sh"
-        ;;
-    *)
-        echo '{"status": "error", "message": "Invalid phase"}'
-        exit 0
-        ;;
-esac
-
-if [[ ! -f "$module_path" ]]; then
-    echo "{\"status\": \"error\", \"message\": \"Module not found: $module\"}"
-    exit 0
-fi
-
 # Create progress file
-progress_file="/tmp/medialab-progress-$$"
+progress_file="${MEDIALAB_PROGRESS_PREFIX}$$"
 touch "$progress_file"
 
 # Run module in background with progress output
@@ -92,6 +92,9 @@ fi
 # Start module
 bash "$module_path" $module_args > "$progress_file.out" 2>&1 &
 pid=$!
+
+# Record this PID so status.cgi may later stop it (and only it).
+wizard_register_pid "$pid"
 
 # Return progress file info
 cat << EOF
