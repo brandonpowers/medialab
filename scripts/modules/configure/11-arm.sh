@@ -169,6 +169,33 @@ with app.app_context():
         fi
     fi
 
+    # Apply pending ARM database migrations
+    # The arm:latest image periodically ships Alembic migrations that add columns
+    # to its models. ARM does NOT run these automatically on container start, so an
+    # existing SQLite DB drifts behind the code. When the running code INSERTs a
+    # column the DB lacks, the ripper crashes mid-job with:
+    #   sqlite3.OperationalError: table <t> has no column named <c>
+    #   INFO: Database is not current, update required. Head: <x> DB: <y>
+    # Running `flask db upgrade` brings the schema to head idempotently (it's a no-op
+    # when already current), so rips survive future image updates without hand-patching.
+    if docker ps --format '{{.Names}}' | grep -q "^arm$" && docker exec arm test -f /home/arm/db/arm.db 2>/dev/null; then
+        print_info "Applying ARM database migrations..."
+
+        local migrate_out
+        migrate_out=$(docker exec arm sh -c \
+            "cd /opt/arm && FLASK_APP=arm.ui flask db upgrade -d /opt/arm/arm/migrations" 2>&1 \
+            | grep -vE 'Database is not current' || true)
+
+        # Confirm the DB is now at head (current revision prints with '(head)')
+        if docker exec arm sh -c \
+            "cd /opt/arm && FLASK_APP=arm.ui flask db current -d /opt/arm/arm/migrations 2>/dev/null" \
+            | grep -q '(head)'; then
+            report_log "success" "ARM database schema is at head"
+        else
+            report_log "warning" "ARM database may not be fully migrated: ${migrate_out:-<no output>}"
+        fi
+    fi
+
     # Configure MakeMKV settings inside container
     print_info "Configuring MakeMKV settings inside ARM container..."
 

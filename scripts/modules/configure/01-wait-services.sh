@@ -16,6 +16,83 @@ MODULE_STEP=1
 MODULE_TOTAL=12
 
 # ============================================
+# HELPERS
+# ============================================
+
+# Provision a Homepage-named API key in Jellyfin's ApiKeys table by writing the
+# SQLite database directly. Jellyfin is briefly stopped (~5s) to avoid lock
+# contention. Idempotent: existing "Homepage" rows are replaced.
+#
+# Returns 0 on success, 1 on any failure. The token is persisted to .env as
+# JELLYFIN_API_KEY and exported.
+sync_jellyfin_widget_key() {
+    local project_root="$1"
+    local db_path="$project_root/data/jellyfin/config/data/jellyfin.db"
+
+    if [[ ! -f "$db_path" ]]; then
+        report_log "warning" "Jellyfin DB not found at $db_path — skipping widget key provisioning"
+        return 1
+    fi
+
+    # Skip if existing key already works (idempotency for re-runs)
+    local current_key
+    current_key=$(get_env_value "JELLYFIN_API_KEY" "$project_root/.env")
+    if [[ -n "$current_key" ]]; then
+        local http
+        http=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "X-Emby-Token: $current_key" \
+            "http://localhost:8096/System/Info" || echo "000")
+        if [[ "$http" == "200" ]]; then
+            return 0
+        fi
+        report_log "info" "Existing Jellyfin API key rejected (HTTP $http) — regenerating"
+    fi
+
+    # Generate, stop, write, restart
+    local new_token
+    new_token=$(python3 -c 'import secrets; print(secrets.token_hex(16))')
+
+    docker compose stop jellyfin > /dev/null 2>&1
+    local py_status=0
+    JF_DB="$db_path" JF_TOKEN="$new_token" python3 - <<'PYEOF' || py_status=$?
+import os, sqlite3, datetime
+db = os.environ["JF_DB"]
+token = os.environ["JF_TOKEN"]
+now = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f0")
+with sqlite3.connect(db) as con:
+    con.execute("DELETE FROM ApiKeys WHERE Name = 'Homepage'")
+    con.execute(
+        "INSERT INTO ApiKeys (DateCreated, DateLastActivity, Name, AccessToken) VALUES (?, ?, ?, ?)",
+        (now, "0001-01-01 05:51:00", "Homepage", token),
+    )
+PYEOF
+    docker compose start jellyfin > /dev/null 2>&1
+
+    if [[ $py_status -ne 0 ]]; then
+        report_log "warning" "Failed to write Homepage API key to Jellyfin DB"
+        return 1
+    fi
+
+    # Wait for Jellyfin to come back up, then verify the new key authenticates
+    local waited=0
+    while (( waited < 30 )); do
+        if curl -s -o /dev/null -w '%{http_code}' \
+            -H "X-Emby-Token: $new_token" \
+            "http://localhost:8096/System/Info" | grep -q '^200$'; then
+            set_env_value "JELLYFIN_API_KEY" "$new_token" "true" "$project_root/.env"
+            export JELLYFIN_API_KEY="$new_token"
+            report_log "info" "Provisioned Jellyfin Homepage API key"
+            return 0
+        fi
+        sleep 2
+        waited=$((waited + 2))
+    done
+
+    report_log "warning" "Jellyfin did not accept new Homepage API key within 30s"
+    return 1
+}
+
+# ============================================
 # MAIN
 # ============================================
 
@@ -147,27 +224,19 @@ main() {
         fi
     fi
 
-    # Generate Jellyfin API key (access token for Homepage widget)
-    local jellyfin_key
-    jellyfin_key=$(get_env_value "JELLYFIN_API_KEY" "$project_root/.env")
-    if [[ -z "$jellyfin_key" ]]; then
-        local admin_user admin_pass
-        admin_user=$(get_env_value "ADMIN_USERNAME" "$project_root/.env")
-        admin_pass=$(get_env_value "ADMIN_PASSWORD" "$project_root/.env")
-        if [[ -n "$admin_user" && -n "$admin_pass" ]]; then
-            local auth_response
-            auth_response=$(curl -s -X POST "http://localhost:8096/Users/AuthenticateByName" \
-                -H "Content-Type: application/json" \
-                -H "X-Emby-Authorization: MediaBrowser Client=\"Medialab\", Device=\"Homepage\", DeviceId=\"homepage-widget\", Version=\"1.0\"" \
-                -d "{\"Username\": \"${admin_user}\", \"Pw\": \"${admin_pass}\"}" 2>/dev/null || true)
-            jellyfin_key=$(echo "$auth_response" | jq -r '.AccessToken // empty' 2>/dev/null || true)
-            if [[ -n "$jellyfin_key" ]]; then
-                set_env_value "JELLYFIN_API_KEY" "$jellyfin_key" "true" "$project_root/.env"
-                export JELLYFIN_API_KEY="$jellyfin_key"
-                report_log "info" "Generated Jellyfin API key"
-            fi
-        fi
-    fi
+    # Provision Jellyfin API key for the Homepage widget.
+    #
+    # We previously authenticated as ADMIN_USERNAME/ADMIN_PASSWORD via /Users/AuthenticateByName
+    # to mint an access token. That approach silently failed on any installation where the
+    # Jellyfin admin password had drifted from .env (e.g. wizard was completed in a prior run
+    # with different creds, or the user changed it via the UI). Because the failure was
+    # swallowed by `|| true`, the homepage widget stayed broken with no visible error.
+    #
+    # We now write directly into Jellyfin's ApiKeys table — the same mechanism the Jellyfin
+    # admin UI uses for "Dashboard → API Keys". It works regardless of admin password state
+    # and is idempotent (DELETE + INSERT keyed on Name="Homepage").
+    sync_jellyfin_widget_key "$project_root" || \
+        report_log "warning" "Jellyfin widget API key not provisioned — homepage Jellyfin widget will show 'API Error'"
 
     report_log "success" "API keys synchronized from container configs"
 

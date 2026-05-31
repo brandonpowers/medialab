@@ -314,6 +314,7 @@ services:
       - ./data/arm/home:/home/arm  # Mount entire home dir to control permissions
       - ./data/arm/config:/etc/arm/config
       - ./scripts/utilities/arm-wrapper.sh:/opt/arm/scripts/docker/docker_arm_wrapper.sh  # Custom wrapper with gosu privilege dropping
+      - ./data/arm/patches/config.py:/opt/arm/arm/models/config.py  # Patch: add missing MAX_CONCURRENT_* columns
       - ${MEDIA_ROOT}/arm:/home/arm/media  # Temporary storage during ripping (on external drive)
       - ${MEDIA_ROOT}:/home/arm/movies  # Final output (ARM adds movies/ or tv/ subfolder)
       - /run/udev:/run/udev:ro  # udev events for automatic disc detection
