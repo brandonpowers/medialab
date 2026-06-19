@@ -27,13 +27,12 @@ main() {
 
     print_section "Configuring Bazarr"
 
-    sleep 3
     local api_key
-    api_key=$(get_api_key "bazarr")
+    api_key=$(wait_for_api_key "bazarr")
 
     if [[ -z "$api_key" ]]; then
         report_log "warning" "Bazarr API key not found - it may need manual configuration"
-        print_info "Visit http://localhost:6767 to complete Bazarr setup"
+        print_info "Visit ${BAZARR_URL} to complete Bazarr setup"
         report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
         return 0
     fi

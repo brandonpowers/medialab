@@ -46,6 +46,32 @@ wait_for_service() {
     return 1
 }
 
+# Poll for a service's API key to become available, printing it once present.
+# The *arr apps write their config (with the API key) shortly after first start;
+# this replaces fixed `sleep N; get_api_key` guesses with a bounded poll that
+# returns as soon as the key exists. Prints the key and returns 0 on success,
+# or prints nothing and returns 1 if it never appears within the budget.
+# Usage: wait_for_api_key <service> [max_attempts] [interval]
+wait_for_api_key() {
+    local service="$1"
+    local max_attempts="${2:-15}"
+    local interval="${3:-2}"
+    local attempt=1
+    local key=""
+
+    while [[ $attempt -le $max_attempts ]]; do
+        key=$(get_api_key "$service")
+        if [[ -n "$key" ]]; then
+            echo "$key"
+            return 0
+        fi
+        sleep "$interval"
+        ((attempt++))
+    done
+
+    return 1
+}
+
 # Check if a service is healthy
 # Usage: check_service_health <name> <url>
 check_service_health() {
@@ -91,6 +117,85 @@ get_api_key() {
     fi
 
     echo "$api_key"
+}
+
+# ============================================
+# IDEMPOTENCY HELPERS
+# ============================================
+
+# Return 0 if the JSON array <json> contains an object whose "name" field
+# exactly equals <name>; return 1 otherwise. A missing/empty/malformed <json>
+# is treated as "not found" (rc 1) rather than an error, so callers can use it
+# directly against a possibly-empty or possibly-failed API response.
+# Usage: resource_exists_by_name <json> <name>
+resource_exists_by_name() {
+    local json="$1"
+    local name="$2"
+
+    [[ -z "$json" ]] && return 1
+
+    # --exit-status: rc 0 if the filter's last output is true/non-null.
+    # 2>/dev/null + the || guards a non-JSON body so we never crash the caller.
+    jq -e --arg n "$name" 'map(select(.name == $n)) | length > 0' \
+        <<<"$json" >/dev/null 2>&1 || return 1
+}
+
+# Idempotently create a named resource in an *arr-style collection: GET the
+# collection, skip if a resource with <name> already exists, otherwise POST it.
+# Unlike a bare api_post, this distinguishes "already present" from a real
+# failure (POST that returns no id) and reports each case honestly, so re-runs
+# of the configure phase are safe and a genuine error is not masked as
+# "may already exist".
+#
+# Usage: ensure_resource <label> <collection_url> <name> <json_body> <api_key>
+#   <label>          human name for logs (e.g. "qBittorrent download client")
+#   <collection_url> the GET/POST endpoint (e.g. .../api/v3/downloadclient)
+#   <name>           value of the resource's "name" field to match on
+# Returns 0 if the resource exists after the call, 1 on a real failure.
+ensure_resource() {
+    local label="$1"
+    local url="$2"
+    local name="$3"
+    local body="$4"
+    local api_key="$5"
+
+    local existing
+    existing=$(api_get "$url" "$api_key" 2>/dev/null || true)
+    if resource_exists_by_name "$existing" "$name"; then
+        report_log "info" "$label already configured, skipping"
+        return 0
+    fi
+
+    # A successful create echoes the new object, which carries an "id".
+    local response
+    response=$(api_post "$url" "$body" "$api_key" 2>/dev/null || true)
+    if echo "$response" | grep -q '"id"'; then
+        report_log "success" "$label added"
+        return 0
+    fi
+
+    report_log "error" "$label could not be created (API rejected the request)"
+    return 1
+}
+
+# Extract the first "id" from an *arr API response. Works whether the response
+# is a single object ({"id":N,...}) or an array ([{"id":N,...},...]). Falls back
+# to <default> (default "") when the input is empty, malformed, or has no id.
+# Replaces brittle `grep -oP '"id":\s*\K\d+' | head -1` parsing.
+# Usage: json_first_id <json> [default]
+json_first_id() {
+    local json="$1"
+    local default="${2:-}"
+    local id
+
+    id=$(jq -r 'if type=="array" then (.[0].id // empty) else (.id // empty) end' \
+        <<<"$json" 2>/dev/null) || id=""
+
+    if [[ -n "$id" && "$id" != "null" ]]; then
+        echo "$id"
+    else
+        echo "$default"
+    fi
 }
 
 # ============================================
@@ -265,7 +370,7 @@ indexer_exists() {
     local indexer_name="$2"
 
     local indexers
-    indexers=$(api_get "http://localhost:9696/api/v1/indexer" "$api_key")
+    indexers=$(api_get "${PROWLARR_URL}/api/v1/indexer" "$api_key")
 
     echo "$indexers" | grep -q "\"name\":\"${indexer_name}\""
 }
@@ -303,7 +408,7 @@ add_public_indexer() {
 EOF
 )
 
-    if api_post "http://localhost:9696/api/v1/indexer" "$body" "$api_key" > /dev/null 2>&1; then
+    if api_post "${PROWLARR_URL}/api/v1/indexer" "$body" "$api_key" > /dev/null 2>&1; then
         report_log "success" "$name added"
         return 0
     else
@@ -327,9 +432,9 @@ qbittorrent_login() {
 
     local response
     response=$(curl -s --max-time 10 -c "$cookie_file" \
-        --header 'Referer: http://localhost:8080' \
+        --header "Referer: ${QBITTORRENT_URL}" \
         --data "username=${username}&password=${password}" \
-        "http://localhost:8080/api/v2/auth/login" 2>/dev/null || echo "FAILED")
+        "${QBITTORRENT_URL}/api/v2/auth/login" 2>/dev/null || echo "FAILED")
 
     if [[ "$response" == "Ok." ]]; then
         echo "$cookie_file"
@@ -346,11 +451,11 @@ qbittorrent_api() {
     local endpoint="$2"
     local post_data="${3:-}"
 
-    local args=(-s --max-time 10 -b "$cookie_file" --header 'Referer: http://localhost:8080')
+    local args=(-s --max-time 10 -b "$cookie_file" --header "Referer: ${QBITTORRENT_URL}")
 
     if [[ -n "$post_data" ]]; then
         args+=(--data "$post_data")
     fi
 
-    curl "${args[@]}" "http://localhost:8080/api/v2/${endpoint}"
+    curl "${args[@]}" "${QBITTORRENT_URL}/api/v2/${endpoint}"
 }

@@ -73,18 +73,17 @@ main() {
         exit 1
     fi
 
-    # Step 4: Check OpenSSL
-    report_progress 4 5 "Checking OpenSSL..."
-    if command_exists openssl; then
-        report_progress 4 5 "OpenSSL installed" "complete"
+    # Step 4: Ensure required CLI tools (jq, curl, openssl).
+    # jq in particular is required by the env generator and several configure
+    # modules; previously it was only pulled in as a side effect of installing
+    # Docker, so a host with Docker already present silently lacked it.
+    report_progress 4 5 "Checking required tools (jq, curl, openssl)..."
+    if ensure_dependencies jq curl openssl; then
+        report_progress 4 5 "Required tools installed" "complete"
     else
-        report_progress 4 5 "Installing OpenSSL..." "running"
-        if [[ $EUID -eq 0 ]]; then
-            apt-get install -y openssl &>/dev/null
-            report_progress 4 5 "OpenSSL installed" "complete"
-        else
-            report_progress 4 5 "OpenSSL not found (install with apt)" "warning"
-        fi
+        report_progress 4 5 "Required tools missing (re-run with sudo)" "error"
+        finish_progress "error" "jq, curl and openssl are required"
+        exit 1
     fi
 
     # Step 5: Check ACL tools (optional - no longer required for ARM permissions)

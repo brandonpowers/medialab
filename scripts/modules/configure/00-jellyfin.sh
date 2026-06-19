@@ -16,7 +16,7 @@ MODULE_NAME="Configure Jellyfin"
 MODULE_STEP=0
 MODULE_TOTAL=13
 
-JELLYFIN_URL="http://localhost:8096"
+JELLYFIN_URL="${JELLYFIN_URL}"
 
 # ============================================
 # HELPER FUNCTIONS

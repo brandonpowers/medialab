@@ -27,9 +27,8 @@ main() {
 
     print_section "Configuring Lidarr"
 
-    sleep 3
     local api_key
-    api_key=$(get_api_key "lidarr")
+    api_key=$(wait_for_api_key "lidarr")
 
     if [[ -z "$api_key" ]]; then
         report_log "error" "Failed to get Lidarr API key"
@@ -46,15 +45,15 @@ main() {
     local admin_pass="${ADMIN_PASSWORD:-}"
     if [[ -n "$admin_pass" ]]; then
         print_info "Configuring Lidarr authentication..."
-        configure_arr_auth "http://localhost:8686" "$api_key" "$admin_user" "$admin_pass" "v1"
+        configure_arr_auth "${LIDARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v1"
     fi
 
     # Get profile IDs for root folder
     print_info "Adding root folder to Lidarr..."
     local quality_profile
-    quality_profile=$(api_get "http://localhost:8686/api/v1/qualityprofile" "$api_key" | grep -oP '"id":\s*\K\d+' | head -1 || echo "1")
+    quality_profile=$(json_first_id "$(api_get "${LIDARR_URL}/api/v1/qualityprofile" "$api_key")" "1")
     local metadata_profile
-    metadata_profile=$(api_get "http://localhost:8686/api/v1/metadataprofile" "$api_key" | grep -oP '"id":\s*\K\d+' | head -1 || echo "1")
+    metadata_profile=$(json_first_id "$(api_get "${LIDARR_URL}/api/v1/metadataprofile" "$api_key")" "1")
 
     # Add root folder (Lidarr v1 API)
     local root_body
@@ -67,7 +66,7 @@ main() {
 }
 EOF
 )
-    api_post "http://localhost:8686/api/v1/rootfolder" "$root_body" "$api_key" > /dev/null 2>&1 && \
+    api_post "${LIDARR_URL}/api/v1/rootfolder" "$root_body" "$api_key" > /dev/null 2>&1 && \
         report_log "success" "Root folder added" || report_log "info" "Root folder may already exist"
 
     # Determine qBittorrent priority
@@ -105,8 +104,8 @@ EOF
 }
 EOF
 )
-    api_post "http://localhost:8686/api/v1/downloadclient" "$qbit_body" "$api_key" > /dev/null 2>&1 && \
-        report_log "success" "qBittorrent added" || report_log "info" "qBittorrent may already exist"
+    ensure_resource "qBittorrent download client" \
+        "${LIDARR_URL}/api/v1/downloadclient" "qBittorrent" "$qbit_body" "$api_key" || true
 
     # Add SABnzbd if configured
     if [[ -n "${SABNZBD_API_KEY:-}" ]]; then
@@ -133,8 +132,8 @@ EOF
 }
 EOF
 )
-        api_post "http://localhost:8686/api/v1/downloadclient" "$sabnzbd_body" "$api_key" > /dev/null 2>&1 && \
-            report_log "success" "SABnzbd added" || report_log "info" "SABnzbd may already exist"
+        ensure_resource "SABnzbd download client" \
+            "${LIDARR_URL}/api/v1/downloadclient" "SABnzbd" "$sabnzbd_body" "$api_key" || true
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

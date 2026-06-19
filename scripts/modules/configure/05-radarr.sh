@@ -27,9 +27,8 @@ main() {
 
     print_section "Configuring Radarr"
 
-    sleep 3
     local api_key
-    api_key=$(get_api_key "radarr")
+    api_key=$(wait_for_api_key "radarr")
 
     if [[ -z "$api_key" ]]; then
         report_log "error" "Failed to get Radarr API key"
@@ -46,17 +45,17 @@ main() {
     local admin_pass="${ADMIN_PASSWORD:-}"
     if [[ -n "$admin_pass" ]]; then
         print_info "Configuring Radarr authentication..."
-        configure_arr_auth "http://localhost:7878" "$api_key" "$admin_user" "$admin_pass" "v3"
+        configure_arr_auth "${RADARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v3"
     fi
 
     # Add root folder
-    add_root_folder "http://localhost:7878" "$api_key" "/media/movies"
+    add_root_folder "${RADARR_URL}" "$api_key" "/media/movies"
 
     # Create 4K Preferred quality profile
     # This profile prefers 4K but accepts 1080p as fallback for content not available in 4K
     print_info "Creating 4K Preferred quality profile..."
     local schema formats profile_body
-    schema=$(api_get "http://localhost:7878/api/v3/qualityprofile/schema" "$api_key" 2>/dev/null)
+    schema=$(api_get "${RADARR_URL}/api/v3/qualityprofile/schema" "$api_key" 2>/dev/null)
     if [[ -n "$schema" ]]; then
         formats=$(echo "$schema" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('formatItems', [])))" 2>/dev/null)
         profile_body=$(cat <<EOF
@@ -111,8 +110,8 @@ main() {
 }
 EOF
 )
-        api_post "http://localhost:7878/api/v3/qualityprofile" "$profile_body" "$api_key" > /dev/null 2>&1 && \
-            report_log "success" "4K Preferred quality profile created" || report_log "info" "4K Preferred profile may already exist"
+        ensure_resource "4K Preferred quality profile" \
+            "${RADARR_URL}/api/v3/qualityprofile" "4K Preferred" "$profile_body" "$api_key" || true
     else
         report_log "warning" "Could not get quality schema - skipping 4K profile creation"
     fi
@@ -154,8 +153,8 @@ EOF
 }
 EOF
 )
-    api_post "http://localhost:7878/api/v3/downloadclient" "$qbit_body" "$api_key" > /dev/null 2>&1 && \
-        report_log "success" "qBittorrent added" || report_log "info" "qBittorrent may already exist"
+    ensure_resource "qBittorrent download client" \
+        "${RADARR_URL}/api/v3/downloadclient" "qBittorrent" "$qbit_body" "$api_key" || true
 
     # Add SABnzbd if configured
     if [[ -n "${SABNZBD_API_KEY:-}" ]]; then
@@ -182,8 +181,8 @@ EOF
 }
 EOF
 )
-        api_post "http://localhost:7878/api/v3/downloadclient" "$sabnzbd_body" "$api_key" > /dev/null 2>&1 && \
-            report_log "success" "SABnzbd added" || report_log "info" "SABnzbd may already exist"
+        ensure_resource "SABnzbd download client" \
+            "${RADARR_URL}/api/v3/downloadclient" "SABnzbd" "$sabnzbd_body" "$api_key" || true
 
         # Add remote path mapping for SABnzbd downloads
         # SABnzbd uses /downloads internally, but Radarr sees it as /media/downloads
@@ -197,7 +196,7 @@ EOF
 }
 EOF
 )
-        api_post "http://localhost:7878/api/v3/remotepathmapping" "$pathmapping_body" "$api_key" > /dev/null 2>&1 && \
+        api_post "${RADARR_URL}/api/v3/remotepathmapping" "$pathmapping_body" "$api_key" > /dev/null 2>&1 && \
             report_log "success" "SABnzbd path mapping added" || report_log "info" "Path mapping may already exist"
     fi
 

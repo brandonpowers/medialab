@@ -6,6 +6,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$(cd "$SCRIPT_DIR/../.." && pwd)"
 
+# Central service URL map (single source of truth for ports).
+source "$SCRIPT_DIR/../lib/services.sh"
+
 echo "[*] Medialab Health Check"
 echo "========================"
 echo ""
@@ -21,14 +24,14 @@ echo ""
 
 # Check critical services
 declare -A services=(
-  ["Jellyfin"]="http://localhost:8096/health"
-  ["Sonarr"]="http://localhost:8989/ping"
-  ["Radarr"]="http://localhost:7878/ping"
-  ["Lidarr"]="http://localhost:8686/ping"
-  ["Prowlarr"]="http://localhost:9696/ping"
-  ["Homepage"]="http://localhost:3000"
-  ["Jellyseerr"]="http://localhost:5055"
-  ["ARM"]="http://localhost:8090"
+  ["Jellyfin"]="${JELLYFIN_URL}/health"
+  ["Sonarr"]="${SONARR_URL}/ping"
+  ["Radarr"]="${RADARR_URL}/ping"
+  ["Lidarr"]="${LIDARR_URL}/ping"
+  ["Prowlarr"]="${PROWLARR_URL}/ping"
+  ["Homepage"]="${HOMEPAGE_URL}"
+  ["Jellyseerr"]="${JELLYSEERR_URL}"
+  ["ARM"]="${ARM_URL}"
 )
 
 all_healthy=true

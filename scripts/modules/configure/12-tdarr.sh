@@ -52,9 +52,9 @@ main() {
     print_section "Configuring Tdarr (Transcoding)"
 
     # Wait for Tdarr to be ready
-    if ! wait_for_service "Tdarr" "http://localhost:8265" 15 2; then
+    if ! wait_for_service "Tdarr" "${TDARR_URL}" 15 2; then
         report_log "warning" "Tdarr not ready - skipping configuration"
-        print_info "Configure manually at http://localhost:8265"
+        print_info "Configure manually at ${TDARR_URL}"
         report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
         return 0
     fi
@@ -81,12 +81,12 @@ main() {
         local data="${3:-}"
 
         if [[ -n "$data" ]]; then
-            curl -s -X "$method" "http://localhost:8265${endpoint}" \
+            curl -s -X "$method" "${TDARR_URL}${endpoint}" \
                 -H "Content-Type: application/json" \
                 "${tdarr_curl_auth[@]}" \
                 -d "$data" 2>/dev/null || echo "{}"
         else
-            curl -s -X "$method" "http://localhost:8265${endpoint}" \
+            curl -s -X "$method" "${TDARR_URL}${endpoint}" \
                 -H "Content-Type: application/json" \
                 "${tdarr_curl_auth[@]}" 2>/dev/null || echo "{}"
         fi
@@ -344,10 +344,10 @@ EOF
 
     report_log "success" "Tdarr fully configured with H.265 ${gpu_name} flow and GPU workers"
     if [[ -n "$tdarr_api_key" ]]; then
-        report_log "info" "Auth enabled - create admin user at http://localhost:8265"
+        report_log "info" "Auth enabled - create admin user at ${TDARR_URL}"
         report_log "info" "API key for integrations: $tdarr_api_key"
     else
-        report_log "info" "To enable auth: visit http://localhost:8265 and create an admin account"
+        report_log "info" "To enable auth: visit ${TDARR_URL} and create an admin account"
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

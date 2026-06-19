@@ -15,7 +15,7 @@ MODULE_NAME="Configure Jellyseerr"
 MODULE_STEP=10
 MODULE_TOTAL=12
 
-JELLYFIN_URL="http://localhost:8096"
+JELLYFIN_URL="${JELLYFIN_URL}"
 
 # ============================================
 # MAIN
@@ -36,7 +36,7 @@ main() {
 
     if [[ ! -f "$settings_file" ]]; then
         report_log "info" "Jellyseerr settings not found - needs initial setup"
-        report_log "info" "Complete setup wizard at http://localhost:5055"
+        report_log "info" "Complete setup wizard at ${JELLYSEERR_URL}"
         report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
         finish_progress "complete" "$MODULE_NAME"
         return 0
@@ -61,7 +61,7 @@ main() {
 
         if [[ -z "$admin_pass" ]]; then
             report_log "info" "No admin password - Jellyseerr requires manual setup"
-            report_log "info" "Visit http://localhost:5055 to configure"
+            report_log "info" "Visit ${JELLYSEERR_URL} to configure"
             report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
             finish_progress "complete" "$MODULE_NAME"
             return 0
@@ -183,7 +183,7 @@ INSERT OR REPLACE INTO user (
     # Check if Radarr is already configured
     local existing_radarr
     existing_radarr=$(curl -s -H "X-Api-Key: $api_key" \
-        "http://localhost:5055/api/v1/settings/radarr" 2>/dev/null || echo "[]")
+        "${JELLYSEERR_URL}/api/v1/settings/radarr" 2>/dev/null || echo "[]")
 
     if [[ "$existing_radarr" == "[]" ]] && [[ -n "$radarr_key" ]]; then
         print_info "Adding Radarr to Jellyseerr..."
@@ -191,7 +191,7 @@ INSERT OR REPLACE INTO user (
         # Get Radarr quality profile ID
         local profile_id
         profile_id=$(curl -s -H "X-Api-Key: $radarr_key" \
-            "http://localhost:7878/api/v3/qualityprofile" 2>/dev/null | \
+            "${RADARR_URL}/api/v3/qualityprofile" 2>/dev/null | \
             jq -r '.[] | select(.name == "HD-1080p") | .id' || echo "1")
         profile_id=${profile_id:-1}
 
@@ -219,7 +219,7 @@ EOF
 )
         curl -s -X POST -H "X-Api-Key: $api_key" \
             -H "Content-Type: application/json" \
-            "http://localhost:5055/api/v1/settings/radarr" \
+            "${JELLYSEERR_URL}/api/v1/settings/radarr" \
             -d "$radarr_body" > /dev/null 2>&1 && \
             report_log "success" "Radarr added to Jellyseerr" || report_log "warning" "Failed to add Radarr"
     else
@@ -229,7 +229,7 @@ EOF
     # Check if Sonarr is already configured
     local existing_sonarr
     existing_sonarr=$(curl -s -H "X-Api-Key: $api_key" \
-        "http://localhost:5055/api/v1/settings/sonarr" 2>/dev/null || echo "[]")
+        "${JELLYSEERR_URL}/api/v1/settings/sonarr" 2>/dev/null || echo "[]")
 
     if [[ "$existing_sonarr" == "[]" ]] && [[ -n "$sonarr_key" ]]; then
         print_info "Adding Sonarr to Jellyseerr..."
@@ -237,7 +237,7 @@ EOF
         # Get Sonarr quality profile ID
         local profile_id
         profile_id=$(curl -s -H "X-Api-Key: $sonarr_key" \
-            "http://localhost:8989/api/v3/qualityprofile" 2>/dev/null | \
+            "${SONARR_URL}/api/v3/qualityprofile" 2>/dev/null | \
             jq -r '.[] | select(.name == "WEB-1080p") | .id' || echo "1")
         profile_id=${profile_id:-1}
 
@@ -269,7 +269,7 @@ EOF
 )
         curl -s -X POST -H "X-Api-Key: $api_key" \
             -H "Content-Type: application/json" \
-            "http://localhost:5055/api/v1/settings/sonarr" \
+            "${JELLYSEERR_URL}/api/v1/settings/sonarr" \
             -d "$sonarr_body" > /dev/null 2>&1 && \
             report_log "success" "Sonarr added to Jellyseerr" || report_log "warning" "Failed to add Sonarr"
     else

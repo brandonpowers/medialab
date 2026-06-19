@@ -27,9 +27,8 @@ main() {
 
     print_section "Configuring Sonarr"
 
-    sleep 3
     local api_key
-    api_key=$(get_api_key "sonarr")
+    api_key=$(wait_for_api_key "sonarr")
 
     if [[ -z "$api_key" ]]; then
         report_log "error" "Failed to get Sonarr API key"
@@ -46,17 +45,17 @@ main() {
     local admin_pass="${ADMIN_PASSWORD:-}"
     if [[ -n "$admin_pass" ]]; then
         print_info "Configuring Sonarr authentication..."
-        configure_arr_auth "http://localhost:8989" "$api_key" "$admin_user" "$admin_pass" "v3"
+        configure_arr_auth "${SONARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v3"
     fi
 
     # Add root folder
-    add_root_folder "http://localhost:8989" "$api_key" "/media/tv"
+    add_root_folder "${SONARR_URL}" "$api_key" "/media/tv"
 
     # Create 4K Preferred quality profile
     # This profile prefers 4K but accepts 1080p as fallback for content not available in 4K
     print_info "Creating 4K Preferred quality profile..."
     local schema formats items profile_body
-    schema=$(api_get "http://localhost:8989/api/v3/qualityprofile/schema" "$api_key" 2>/dev/null)
+    schema=$(api_get "${SONARR_URL}/api/v3/qualityprofile/schema" "$api_key" 2>/dev/null)
     if [[ -n "$schema" ]]; then
         # Get format items and modify quality items to enable 1080p and 4K
         formats=$(echo "$schema" | python3 -c "import sys,json; print(json.dumps(json.load(sys.stdin).get('formatItems', [])))" 2>/dev/null)
@@ -95,8 +94,8 @@ print(json.dumps(items))
 }
 EOF
 )
-        api_post "http://localhost:8989/api/v3/qualityprofile" "$profile_body" "$api_key" > /dev/null 2>&1 && \
-            report_log "success" "4K Preferred quality profile created" || report_log "info" "4K Preferred profile may already exist"
+        ensure_resource "4K Preferred quality profile" \
+            "${SONARR_URL}/api/v3/qualityprofile" "4K Preferred" "$profile_body" "$api_key" || true
     else
         report_log "warning" "Could not get quality schema - skipping 4K profile creation"
     fi
@@ -138,8 +137,8 @@ EOF
 }
 EOF
 )
-    api_post "http://localhost:8989/api/v3/downloadclient" "$qbit_body" "$api_key" > /dev/null 2>&1 && \
-        report_log "success" "qBittorrent added" || report_log "info" "qBittorrent may already exist"
+    ensure_resource "qBittorrent download client" \
+        "${SONARR_URL}/api/v3/downloadclient" "qBittorrent" "$qbit_body" "$api_key" || true
 
     # Add SABnzbd if configured
     if [[ -n "${SABNZBD_API_KEY:-}" ]]; then
@@ -166,8 +165,8 @@ EOF
 }
 EOF
 )
-        api_post "http://localhost:8989/api/v3/downloadclient" "$sabnzbd_body" "$api_key" > /dev/null 2>&1 && \
-            report_log "success" "SABnzbd added" || report_log "info" "SABnzbd may already exist"
+        ensure_resource "SABnzbd download client" \
+            "${SONARR_URL}/api/v3/downloadclient" "SABnzbd" "$sabnzbd_body" "$api_key" || true
 
         # Add remote path mapping for SABnzbd downloads
         # SABnzbd uses /downloads internally, but Sonarr sees it as /media/downloads
@@ -181,7 +180,7 @@ EOF
 }
 EOF
 )
-        api_post "http://localhost:8989/api/v3/remotepathmapping" "$pathmapping_body" "$api_key" > /dev/null 2>&1 && \
+        api_post "${SONARR_URL}/api/v3/remotepathmapping" "$pathmapping_body" "$api_key" > /dev/null 2>&1 && \
             report_log "success" "SABnzbd path mapping added" || report_log "info" "Path mapping may already exist"
     fi
 

@@ -115,6 +115,50 @@ command_exists() {
     command -v "$1" &>/dev/null
 }
 
+# Print the subset of the given commands that are NOT on PATH, space-separated,
+# in the order given. Empty output means everything is present.
+# Usage: missing_dependencies <cmd> [cmd...]
+missing_dependencies() {
+    local cmd missing=()
+    for cmd in "$@"; do
+        command_exists "$cmd" || missing+=("$cmd")
+    done
+    echo "${missing[*]}"
+}
+
+# Ensure each given command is installed, apt-get installing any that are
+# missing. For our deps the command name equals the package name (jq, curl,
+# openssl). Returns 0 if everything is present (or successfully installed),
+# 1 if anything is still missing afterward (e.g. not root, or install failed).
+# Usage: ensure_dependencies <cmd> [cmd...]
+ensure_dependencies() {
+    local missing
+    missing=$(missing_dependencies "$@")
+    [[ -z "$missing" ]] && return 0
+
+    if [[ $EUID -ne 0 ]]; then
+        print_error "Missing required tools: $missing (re-run with sudo to install)"
+        return 1
+    fi
+
+    print_info "Installing missing tools: $missing"
+    apt-get update -qq &>/dev/null || true
+    # shellcheck disable=SC2086  # word-splitting the package list is intended
+    if ! apt-get install -y $missing &>/dev/null; then
+        print_error "Failed to install: $missing"
+        return 1
+    fi
+
+    # Confirm they are actually on PATH now.
+    local still_missing
+    still_missing=$(missing_dependencies "$@")
+    if [[ -n "$still_missing" ]]; then
+        print_error "Still missing after install: $still_missing"
+        return 1
+    fi
+    return 0
+}
+
 # Generate a random password
 generate_password() {
     openssl rand -base64 32

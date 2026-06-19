@@ -13,6 +13,7 @@ _MEDIALAB_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Source all library modules
 source "$_MEDIALAB_LIB_DIR/common.sh"
+source "$_MEDIALAB_LIB_DIR/services.sh"
 source "$_MEDIALAB_LIB_DIR/progress.sh"
 source "$_MEDIALAB_LIB_DIR/detect.sh"
 source "$_MEDIALAB_LIB_DIR/env.sh"

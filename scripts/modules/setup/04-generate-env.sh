@@ -26,7 +26,7 @@ for arg in "$@"; do
         --config=*) CONFIG_FILE="${arg#*=}" ;;
         --config)
             shift
-            CONFIG_FILE="$1"
+            CONFIG_FILE="${1:-}"
             ;;
     esac
 done

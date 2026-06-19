@@ -64,7 +64,7 @@ main() {
 }
 EOF
 )
-        api_post "http://localhost:9696/api/v1/applications" "$sonarr_body" "$prowlarr_key" > /dev/null 2>&1 && \
+        api_post "${PROWLARR_URL}/api/v1/applications" "$sonarr_body" "$prowlarr_key" > /dev/null 2>&1 && \
             report_log "success" "Sonarr linked to Prowlarr" || report_log "info" "Sonarr may already be linked"
     fi
 
@@ -89,7 +89,7 @@ EOF
 }
 EOF
 )
-        api_post "http://localhost:9696/api/v1/applications" "$radarr_body" "$prowlarr_key" > /dev/null 2>&1 && \
+        api_post "${PROWLARR_URL}/api/v1/applications" "$radarr_body" "$prowlarr_key" > /dev/null 2>&1 && \
             report_log "success" "Radarr linked to Prowlarr" || report_log "info" "Radarr may already be linked"
     fi
 
@@ -114,14 +114,14 @@ EOF
 }
 EOF
 )
-        api_post "http://localhost:9696/api/v1/applications" "$lidarr_body" "$prowlarr_key" > /dev/null 2>&1 && \
+        api_post "${PROWLARR_URL}/api/v1/applications" "$lidarr_body" "$prowlarr_key" > /dev/null 2>&1 && \
             report_log "success" "Lidarr linked to Prowlarr" || report_log "info" "Lidarr may already be linked"
     fi
 
     # Trigger sync to push indexers to all linked apps
     print_info "Triggering Prowlarr sync..."
     sleep 2
-    api_post "http://localhost:9696/api/v1/applicationsindexersync" "" "$prowlarr_key" > /dev/null 2>&1 && \
+    api_post "${PROWLARR_URL}/api/v1/applicationsindexersync" "" "$prowlarr_key" > /dev/null 2>&1 && \
         report_log "success" "Indexers synced to all apps" || report_log "warning" "Sync may need to be triggered manually"
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

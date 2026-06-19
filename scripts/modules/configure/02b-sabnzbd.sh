@@ -15,7 +15,7 @@ MODULE_NAME="Configure SABnzbd"
 MODULE_STEP=2
 MODULE_TOTAL=13
 
-SABNZBD_URL="http://localhost:8085"
+# SABNZBD_URL is provided centrally by scripts/lib/services.sh (sourced above).
 
 # ============================================
 # MAIN

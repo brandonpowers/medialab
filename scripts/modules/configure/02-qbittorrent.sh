@@ -33,7 +33,7 @@ main() {
     report_log "info" "Waiting for qBittorrent to be ready..."
     local max_wait=30
     local waited=0
-    while ! curl -s -m 2 "http://localhost:8080/api/v2/app/version" > /dev/null 2>&1; do
+    while ! curl -s -m 2 "${QBITTORRENT_URL}/api/v2/app/version" > /dev/null 2>&1; do
         sleep 2
         waited=$((waited + 2))
         if [[ $waited -ge $max_wait ]]; then
@@ -183,7 +183,7 @@ main() {
         report_log "success" "Credentials saved to .env"
     else
         report_log "warning" "Could not login to qBittorrent"
-        report_log "info" "Configure manually at http://localhost:8080"
+        report_log "info" "Configure manually at ${QBITTORRENT_URL}"
         report_log "info" "Check logs: docker compose logs qbittorrent | grep password"
     fi
 

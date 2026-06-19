@@ -41,7 +41,7 @@ sync_jellyfin_widget_key() {
         local http
         http=$(curl -s -o /dev/null -w '%{http_code}' \
             -H "X-Emby-Token: $current_key" \
-            "http://localhost:8096/System/Info" || echo "000")
+            "${JELLYFIN_URL}/System/Info" || echo "000")
         if [[ "$http" == "200" ]]; then
             return 0
         fi
@@ -78,7 +78,7 @@ PYEOF
     while (( waited < 30 )); do
         if curl -s -o /dev/null -w '%{http_code}' \
             -H "X-Emby-Token: $new_token" \
-            "http://localhost:8096/System/Info" | grep -q '^200$'; then
+            "${JELLYFIN_URL}/System/Info" | grep -q '^200$'; then
             set_env_value "JELLYFIN_API_KEY" "$new_token" "true" "$project_root/.env"
             export JELLYFIN_API_KEY="$new_token"
             report_log "info" "Provisioned Jellyfin Homepage API key"
@@ -138,17 +138,17 @@ main() {
     print_section "Waiting for Services to Start"
 
     # Critical services - must be ready
-    wait_for_service "Prowlarr" "http://localhost:9696/ping" 30 2 || exit 1
-    wait_for_service "Sonarr" "http://localhost:8989/ping" 30 2 || exit 1
-    wait_for_service "Radarr" "http://localhost:7878/ping" 30 2 || exit 1
-    wait_for_service "Lidarr" "http://localhost:8686/ping" 30 2 || exit 1
-    wait_for_service "qBittorrent" "http://localhost:8080" 30 2 || exit 1
+    wait_for_service "Prowlarr" "${PROWLARR_URL}/ping" 30 2 || exit 1
+    wait_for_service "Sonarr" "${SONARR_URL}/ping" 30 2 || exit 1
+    wait_for_service "Radarr" "${RADARR_URL}/ping" 30 2 || exit 1
+    wait_for_service "Lidarr" "${LIDARR_URL}/ping" 30 2 || exit 1
+    wait_for_service "qBittorrent" "${QBITTORRENT_URL}" 30 2 || exit 1
 
     # Optional services - continue if not ready
-    wait_for_service "Bazarr" "http://localhost:6767" 15 2 || print_info "Bazarr will need manual configuration"
-    wait_for_service "SABnzbd" "http://localhost:8085" 15 2 || print_info "SABnzbd will need manual configuration"
-    wait_for_service "Jellyfin" "http://localhost:8096/health" 15 2 || print_info "Jellyfin will need manual configuration"
-    wait_for_service "Jellyseerr" "http://localhost:5055" 15 2 || print_info "Jellyseerr will need manual configuration"
+    wait_for_service "Bazarr" "${BAZARR_URL}" 15 2 || print_info "Bazarr will need manual configuration"
+    wait_for_service "SABnzbd" "${SABNZBD_URL}" 15 2 || print_info "SABnzbd will need manual configuration"
+    wait_for_service "Jellyfin" "${JELLYFIN_URL}/health" 15 2 || print_info "Jellyfin will need manual configuration"
+    wait_for_service "Jellyseerr" "${JELLYSEERR_URL}" 15 2 || print_info "Jellyseerr will need manual configuration"
 
     # Sync all API keys from container configs to .env
     # This ensures .env has the actual keys containers are using

@@ -28,13 +28,12 @@ main() {
     print_section "Configuring Prowlarr"
 
     # Wait for API key to be generated
-    sleep 5
     local api_key
-    api_key=$(get_api_key "prowlarr")
+    api_key=$(wait_for_api_key "prowlarr")
 
     if [[ -z "$api_key" ]]; then
         report_log "error" "Failed to get Prowlarr API key"
-        print_info "Please configure Prowlarr manually at http://localhost:9696"
+        print_info "Please configure Prowlarr manually at ${PROWLARR_URL}"
         report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "warning"
         return 1
     fi
@@ -48,17 +47,17 @@ main() {
     local admin_pass="${ADMIN_PASSWORD:-}"
     if [[ -n "$admin_pass" ]]; then
         print_info "Configuring Prowlarr authentication..."
-        configure_arr_auth "http://localhost:9696" "$api_key" "$admin_user" "$admin_pass" "v1"
+        configure_arr_auth "${PROWLARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v1"
     fi
 
     # Create FlareSolverr tag
     print_info "Creating FlareSolverr tag..."
     local tag_id
-    tag_id=$(api_post "http://localhost:9696/api/v1/tag" '{"label": "flaresolverr"}' "$api_key" 2>/dev/null | grep -oP '"id":\s*\K\d+' || echo "")
+    tag_id=$(json_first_id "$(api_post "${PROWLARR_URL}/api/v1/tag" '{"label": "flaresolverr"}' "$api_key" 2>/dev/null)" "")
 
     if [[ -z "$tag_id" ]]; then
         # Tag might already exist, get its ID
-        tag_id=$(api_get "http://localhost:9696/api/v1/tag" "$api_key" 2>/dev/null | grep -oP '"id":\s*\K\d+' | head -1 || echo "1")
+        tag_id=$(json_first_id "$(api_get "${PROWLARR_URL}/api/v1/tag" "$api_key" 2>/dev/null)" "1")
     fi
 
     # Add FlareSolverr proxy
@@ -78,8 +77,8 @@ main() {
 }
 EOF
 )
-    api_post "http://localhost:9696/api/v1/indexerproxy" "$flaresolverr_body" "$api_key" > /dev/null 2>&1 && \
-        report_log "success" "FlareSolverr added to Prowlarr" || report_log "info" "FlareSolverr may already exist"
+    ensure_resource "FlareSolverr proxy" \
+        "${PROWLARR_URL}/api/v1/indexerproxy" "FlareSolverr" "$flaresolverr_body" "$api_key" || true
 
     # Add public indexers
     print_info "Adding public torrent indexers..."
@@ -121,8 +120,8 @@ EOF
 }
 EOF
 )
-    api_post "http://localhost:9696/api/v1/downloadclient" "$qbit_body" "$api_key" > /dev/null 2>&1 && \
-        report_log "success" "qBittorrent added to Prowlarr" || report_log "info" "qBittorrent may already exist"
+    ensure_resource "qBittorrent download client" \
+        "${PROWLARR_URL}/api/v1/downloadclient" "qBittorrent" "$qbit_body" "$api_key" || true
 
     # Add SABnzbd download client if configured
     if [[ -n "${SABNZBD_API_KEY:-}" ]]; then
@@ -151,8 +150,8 @@ EOF
 }
 EOF
 )
-        api_post "http://localhost:9696/api/v1/downloadclient" "$sab_body" "$api_key" > /dev/null 2>&1 && \
-            report_log "success" "SABnzbd added to Prowlarr" || report_log "info" "SABnzbd may already exist"
+        ensure_resource "SABnzbd download client" \
+            "${PROWLARR_URL}/api/v1/downloadclient" "SABnzbd" "$sab_body" "$api_key" || true
     fi
 
     # Add NZB indexer if configured
@@ -206,8 +205,8 @@ EOF
 }
 EOF
 )
-        api_post "http://localhost:9696/api/v1/indexer" "$nzb_body" "$api_key" > /dev/null 2>&1 && \
-            report_log "success" "${nzb_name} indexer added to Prowlarr" || report_log "info" "${nzb_name} may already exist"
+        ensure_resource "${nzb_name} indexer" \
+            "${PROWLARR_URL}/api/v1/indexer" "${nzb_name}" "$nzb_body" "$api_key" || true
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
