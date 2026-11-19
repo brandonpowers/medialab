@@ -610,7 +610,7 @@ const configureModules = [
     { id: '07-bazarr', name: 'Configure Bazarr', phase: 'configure', container: 'bazarr' },
     { id: '08-link-prowlarr', name: 'Link Prowlarr', phase: 'configure' },
     { id: '09-recyclarr', name: 'Configure Recyclarr', phase: 'configure' },
-    { id: '10-jellyseerr', name: 'Configure Jellyseerr', phase: 'configure', container: 'jellyseerr' },
+    { id: '10-jellyseerr', name: 'Configure Seerr', phase: 'configure', container: 'jellyseerr' },
     { id: '11-arm', name: 'Configure ARM', phase: 'configure', container: 'arm' },
     { id: '12-tdarr', name: 'Configure Tdarr', phase: 'configure', container: 'tdarr' },
     { id: '13-homepage', name: 'Verify Homepage', phase: 'configure', container: 'homepage' }
@@ -1134,7 +1134,7 @@ let configurationComplete = false;
 const services = [
     { name: 'Homepage', port: 3000, container: 'homepage', hasConfig: true },
     { name: 'Jellyfin', port: 8096, container: 'jellyfin', hasConfig: true },
-    { name: 'Jellyseerr', port: 5055, container: 'jellyseerr', hasConfig: true },
+    { name: 'Seerr', port: 5055, container: 'jellyseerr', hasConfig: true },
     { name: 'Sonarr', port: 8989, container: 'sonarr', hasConfig: true },
     { name: 'Radarr', port: 7878, container: 'radarr', hasConfig: true },
     { name: 'Lidarr', port: 8686, container: 'lidarr', hasConfig: true },

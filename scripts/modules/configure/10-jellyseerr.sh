@@ -57,7 +57,10 @@ main() {
     if [[ "$initialized" != "true" ]]; then
         local admin_user="${ADMIN_USERNAME:-admin}"
         local admin_pass="${ADMIN_PASSWORD:-}"
-        local admin_email="${ADMIN_EMAIL:-admin@localhost}"
+        # Seerr lowercases email on every write it makes itself; match that,
+        # since this module inserts the admin row directly.
+        local admin_email
+        admin_email="$(printf '%s' "${ADMIN_EMAIL:-admin@localhost}" | tr '[:upper:]' '[:lower:]')"
 
         if [[ -z "$admin_pass" ]]; then
             report_log "info" "No admin password - Jellyseerr requires manual setup"

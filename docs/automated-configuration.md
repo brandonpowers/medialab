@@ -121,17 +121,17 @@ This will:
      - TV Shows: `/media/tv`
      - Music: `/media/music`
 
-5. **Jellyseerr - Link to Jellyfin**
+5. **Seerr - Link to Jellyfin**
    - URL: `http://SERVER_IP:5055`
    - Sign in with Jellyfin account
    - Configure Sonarr connection (API key already in `.env`)
    - Configure Radarr connection (API key already in `.env`)
 
 6. **Cloudflare Tunnel - Configure Routes** (Optional)
-   - See: [Networking Guide](networking.md#cloudflare-tunnel-setup)
+   - See: [Networking Guide](networking.md#cloudflare-tunnel)
    - Add public hostnames for:
      - Jellyfin
-     - Jellyseerr
+     - Seerr
      - Homepage
 
 ## Environment Variables
@@ -321,11 +321,11 @@ The script is idempotent - safe to run multiple times. It will:
 
 After automated configuration:
 
-1. **[Add Indexers to Prowlarr](media-automation.md#prowlarr-setup)** - Required for content discovery
-2. **[Configure Jellyfin Libraries](media-streaming.md#jellyfin-setup)** - Point to media folders
-3. **[Link Jellyseerr](media-streaming.md#jellyseerr-setup)** - User-friendly request system
+1. **[Add Indexers to Prowlarr](media-automation.md#prowlarr---indexer-manager)** - Required for content discovery
+2. **[Configure Jellyfin Libraries](media-streaming.md#jellyfin)** - Point to media folders
+3. **[Link Seerr](media-streaming.md#seerr)** - User-friendly request system
 4. **[Set Up Remote Access](networking.md)** - Cloudflare Tunnel (optional)
-5. **[Test ARM Disc Ripping](../README.md#blu-ray-ripping)** - Insert a disc to verify
+5. **[Test ARM Disc Ripping](monitoring.md#arm---automatic-ripping-machine)** - Insert a disc to verify
 
 ## Benefits of Automation
 

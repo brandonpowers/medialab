@@ -108,14 +108,30 @@ docker image prune -f
 
 echo ""
 echo "[6/6] Verifying service health..."
-# Give containers a moment to start before probing.
-sleep 10
-if "$SCRIPT_DIR/health-check.sh"; then
+# A major version can run long migrations on first start (Jellyfin 10.11 → 12
+# serves a placeholder for minutes), so poll for up to HEALTH_WAIT seconds
+# instead of judging after one fixed pause. Only the final attempt's report is
+# shown.
+HEALTH_WAIT="${HEALTH_WAIT:-300}"
+healthy=false
+waited=0
+while (( waited < HEALTH_WAIT )); do
+    sleep 15
+    waited=$((waited + 15))
+    if "$SCRIPT_DIR/health-check.sh" > /dev/null 2>&1; then
+        healthy=true
+        break
+    fi
+    echo "    still starting... (${waited}s)"
+done
+if $healthy; then
+    "$SCRIPT_DIR/health-check.sh" || true
     echo ""
     echo "[✓] Update complete — all checked services are healthy."
 else
+    "$SCRIPT_DIR/health-check.sh" || true
     echo ""
-    echo "[!] Update applied, but some services are not healthy yet."
+    echo "[!] Update applied, but some services are not healthy after ${HEALTH_WAIT}s."
     echo "    They may still be starting. Re-check with:"
     echo "        $SCRIPT_DIR/health-check.sh"
     echo "    Inspect logs with: docker compose logs -f <servicename>"

@@ -254,7 +254,7 @@ Settings → Download Clients
 ### How It Works
 
 ```
-1. Media requested in Jellyseerr
+1. Media requested in Seerr
         ↓
 2. Sonarr/Radarr searches indexers
         ↓

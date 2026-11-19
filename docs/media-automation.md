@@ -96,8 +96,8 @@ The *arr stack automates media management, downloading, and quality control.
 
 ### Adding TV Shows
 
-**Method 1: Via Jellyseerr (Recommended)**
-- Users request shows in Jellyseerr
+**Method 1: Via Seerr (Recommended)**
+- Users request shows in Seerr
 - Sonarr receives request automatically
 
 **Method 2: Direct in Sonarr**
@@ -139,8 +139,8 @@ The *arr stack automates media management, downloading, and quality control.
 
 ### Adding Movies
 
-**Method 1: Via Jellyseerr**
-- Request movies in Jellyseerr
+**Method 1: Via Seerr**
+- Request movies in Seerr
 
 **Method 2: Direct in Radarr**
 - Movies → Add New
@@ -275,9 +275,9 @@ crontab -e
 ## Complete Automation Workflow
 
 ```
-1. User requests content in Jellyseerr
+1. User requests content in Seerr
          ↓
-2. Jellyseerr → Sonarr/Radarr
+2. Seerr → Sonarr/Radarr
          ↓
 3. Sonarr/Radarr searches indexers (via Prowlarr)
          ↓

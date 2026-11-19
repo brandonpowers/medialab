@@ -225,7 +225,7 @@ All services should show "Up" status.
 
 **Public Services** (via Cloudflare Tunnel - after configuration):
 - Jellyfin: https://jellyfin.yourdomain.com
-- Jellyseerr: https://jellyseerr.yourdomain.com
+- Seerr: https://jellyseerr.yourdomain.com
 - Homepage: https://home.yourdomain.com
 
 **Private Services** (LAN only):
@@ -281,8 +281,8 @@ docker compose up -d
 After successful installation:
 
 1. **[Configure Cloudflare Tunnel](networking.md#cloudflare-tunnel)** - For remote access (optional)
-2. **[Set up media libraries](../README.md#initial-setup)** - Configure Sonarr/Radarr
-3. **[Configure ARM](../README.md#blu-ray-ripping)** - Test automatic disc ripping
+2. **[Set up media libraries](media-automation.md)** - Configure Sonarr/Radarr
+3. **[Configure ARM](monitoring.md#arm---automatic-ripping-machine)** - Test automatic disc ripping
 
 ## Backup Strategy
 

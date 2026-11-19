@@ -7,12 +7,20 @@ Services for streaming and managing your media library.
 | Service | Purpose | Access | Port |
 |---------|---------|--------|------|
 | **Jellyfin** | Media server for movies, TV, and music | Public (Cloudflare) | 8096 |
-| **Jellyseerr** | Media request and discovery platform | Public (Cloudflare) | 5055 |
+| **Seerr** | Media request and discovery platform | Public (Cloudflare) | 5055 |
 | **Homepage** | Unified dashboard for all services | Public (Cloudflare) | 3000 |
 
 ## Jellyfin
 
 Open-source media server with hardware transcoding support.
+
+> **Jellyfin 12.** `jellyfin/jellyfin:latest` is Jellyfin 12, the release after 10.11 under a new
+> version number. Upgrading from 10.x runs a database migration on first start (the server shows a
+> placeholder page for a few minutes) and switches off *legacy authorization*: the `X-Emby-Token`
+> / `X-Emby-Authorization` headers and the `api_key` query parameter. Medialab's scripts and the
+> Homepage widget use the current `Authorization: MediaBrowser …` scheme. If an older third-party
+> app stops connecting after the upgrade, update the app; as a last resort Jellyfin has a server
+> setting to re-enable legacy authorization.
 
 ### Features
 - Stream movies, TV shows, and music
@@ -98,7 +106,7 @@ ls -la /mnt/media/movies
 
 ---
 
-## Jellyseerr
+## Seerr
 
 Media request and discovery platform that integrates with Jellyfin, Sonarr, and Radarr.
 
@@ -118,13 +126,13 @@ Media request and discovery platform that integrates with Jellyfin, Sonarr, and 
 
 ### Initial Setup
 
-1. **Access Jellyseerr:**
+1. **Access Seerr:**
    - Public: https://jellyseerr.yourdomain.com
    - Local: http://CT-IP:5055
 
 2. **Sign in with Jellyfin:**
    - Use your Jellyfin admin credentials
-   - Jellyseerr will authenticate via Jellyfin
+   - Seerr will authenticate via Jellyfin
 
 3. **Configure Jellyfin Connection:**
 
@@ -171,7 +179,7 @@ Media request and discovery platform that integrates with Jellyfin, Sonarr, and 
    - Set request limits (optional)
    - Configure approval requirements
 
-### Using Jellyseerr
+### Using Seerr
 
 **Requesting Content:**
 
@@ -293,15 +301,15 @@ docker compose logs homepage
 
 ## Integration Between Services
 
-### Jellyfin ← Jellyseerr Workflow
+### Jellyfin ← Seerr Workflow
 
-1. User requests content in Jellyseerr
-2. Jellyseerr sends request to Sonarr/Radarr
+1. User requests content in Seerr
+2. Seerr sends request to Sonarr/Radarr
 3. Sonarr/Radarr searches for content
 4. Downloads via qBittorrent/SABnzbd
 5. Content imported to `/media/movies` or `/media/tv`
 6. Jellyfin automatically scans and adds to library
-7. User receives notification in Jellyseerr
+7. User receives notification in Seerr
 8. Content available to stream in Jellyfin
 
 ### Homepage Dashboard Integration
@@ -324,7 +332,7 @@ Homepage provides:
 4. **User profiles** - Create separate profiles for family members
 5. **Backup metadata** - Important for watch history and custom artwork
 
-### Jellyseerr
+### Seerr
 
 1. **Configure auto-approval** - For trusted users
 2. **Set request limits** - Prevent abuse
@@ -352,7 +360,7 @@ Create collections for movie series:
 3. Create new collection or add to existing
 4. Collections appear in library view
 
-### Jellyseerr Webhooks
+### Seerr Webhooks
 
 Send notifications to Discord/Slack:
 1. Settings → Notifications → Webhook
@@ -378,7 +386,7 @@ Add custom CSS/JS:
 - Limit simultaneous transcodes in Dashboard → Playback
 - Use appropriate streaming quality settings per user
 
-### Jellyseerr
+### Seerr
 
 - Uses SQLite database (built-in)
 - Database is stored in container config volume
@@ -396,7 +404,7 @@ Add custom CSS/JS:
 | Service | Public URL | LAN URL |
 |---------|-----------|---------|
 | Jellyfin | https://jellyfin.yourdomain.com | http://SERVER_IP:8096 |
-| Jellyseerr | https://jellyseerr.yourdomain.com | http://SERVER_IP:5055 |
+| Seerr | https://jellyseerr.yourdomain.com | http://SERVER_IP:5055 |
 | Homepage | https://home.yourdomain.com | http://SERVER_IP:3000 |
 
 All services accessible on your local network or remotely via Cloudflare Tunnel.

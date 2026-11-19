@@ -5,7 +5,7 @@ This stack uses a **privacy-first architecture** with Cloudflare Tunnel to provi
 ## Overview
 
 **Access model:**
-- **Public services** (Jellyfin, Jellyseerr, Homepage) → Cloudflare Tunnel (remote access)
+- **Public services** (Jellyfin, Seerr, Homepage) → Cloudflare Tunnel (remote access)
 - **Admin services** (Sonarr, Radarr, etc.) → LAN only (local network)
 
 ## Cloudflare Tunnel
@@ -96,7 +96,7 @@ Additional settings:
   - No TLS Verify: ON (internal traffic)
 ```
 
-**3. Jellyseerr (Media Requests)**
+**3. Seerr (Media Requests)**
 ```
 Public hostname: jellyseerr.yourdomain.com
 Service:
@@ -185,7 +185,7 @@ For additional security on public services:
   - Or: Country = United States (or your country)
   - Or: Require authentication via Google/GitHub/etc.
 
-Example: Require login before accessing Jellyseerr
+Example: Require login before accessing Seerr
 
 ### 3. Enable Rate Limiting
 - Cloudflare dashboard - Security - Settings
@@ -207,7 +207,7 @@ resolver. On hosts running **systemd-resolved**, the host's `/etc/resolv.conf`
 points at a loopback stub (`127.0.0.53`) that Docker cannot use directly inside a
 container, so it forwards through systemd-resolved instead. That extra hop can
 intermittently time out and surface as `getaddrinfo EAI_AGAIN` / `503` failures —
-e.g. a Radarr → TMDB lookup failing and a Jellyseerr request silently going to
+e.g. a Radarr → TMDB lookup failing and a Seerr request silently going to
 `FAILED`.
 
 To avoid this, setup auto-detects the host's **own** upstream resolver (typically
@@ -302,7 +302,7 @@ docker compose restart cloudflared
   |  |     Docker Compose Services          |  |
   |  |                                      |  |
   |  |  PUBLIC (via Cloudflare):            |  |
-  |  |    Jellyfin, Jellyseerr, Homepage    |  |
+  |  |    Jellyfin, Seerr, Homepage         |  |
   |  |                                      |  |
   |  |  PRIVATE (LAN only):                 |  |
   |  |    *arr apps, Downloads, Tdarr, ARM  |  |

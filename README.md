@@ -101,7 +101,7 @@ For detailed information about automated configuration, see **[Automated Configu
 ## Service Documentation
 
 ### Media Services
-- **[Media Streaming](docs/media-streaming.md)** - Jellyfin, Jellyseerr, Homepage dashboard
+- **[Media Streaming](docs/media-streaming.md)** - Jellyfin, Seerr, Homepage dashboard
 
 ### Automation & Downloads
 - **[Media Automation](docs/media-automation.md)** - Sonarr, Radarr, Lidarr, Prowlarr, Bazarr, Recyclarr
@@ -143,7 +143,7 @@ For detailed information about automated configuration, see **[Automated Configu
   |  |     Docker Compose Services         |  |
   |  |                                     |  |
   |  |  PUBLIC (via Cloudflare):           |  |
-  |  |    Jellyfin, Jellyseerr, Homepage   |  |
+  |  |    Jellyfin, Seerr, Homepage        |  |
   |  |                                     |  |
   |  |  PRIVATE (LAN only):                |  |
   |  |    *arr apps, Downloads, Tdarr, ARM |  |
@@ -165,7 +165,7 @@ Accessible from anywhere with **home IP hidden**:
 
 - **Dashboard** - https://home.yourdomain.com
 - **Jellyfin** - https://jellyfin.yourdomain.com
-- **Jellyseerr** - https://jellyseerr.yourdomain.com
+- **Seerr** - https://jellyseerr.yourdomain.com
 
 ### Private Admin Services (LAN only)
 Access from your local network:
@@ -189,7 +189,7 @@ Access from your local network:
 | **Cloudflared** | Secure tunnel for public access | - |
 | **Homepage** | Dashboard for all services | 3000 |
 | **Jellyfin** | Media streaming server | 8096 |
-| **Jellyseerr** | Media request management | 5055 |
+| **Seerr** | Media request management | 5055 |
 | **Sonarr** | TV show automation | 8989 |
 | **Radarr** | Movie automation | 7878 |
 | **Lidarr** | Music automation | 8686 |
