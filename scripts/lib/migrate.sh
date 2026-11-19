@@ -45,6 +45,98 @@ arm_migrate_media_paths() {
     return 0
 }
 
+# _widget_ensure_field <file> <widget-type> <field> <value>
+#
+# For every Homepage widget block whose `type:` line is exactly <widget-type>,
+# add `<field>: <value>` at the widget's indentation if the block lacks that
+# field. A block runs from its `type:` line until a blank line or a line
+# indented less than `type:`. Prints the file's new content to stdout and
+# returns 0 if anything was added, 1 if not.
+_widget_ensure_field() {
+    awk -v typ="$2" -v field="$3" -v val="$4" '
+        function close_block() {
+            if (pending && !has) { print ind field ": " val; added = 1 }
+            pending = 0
+        }
+        {
+            if (pending) {
+                match($0, /^ */)
+                if ($0 ~ /^ *$/ || RLENGTH < length(ind)) close_block()
+                else if (substr($0, 1, length(ind) + length(field) + 1) == ind field ":") has = 1
+            }
+            if (!pending && $0 ~ ("^ *type: " typ " *$")) {
+                match($0, /^ */); ind = substr($0, 1, RLENGTH); pending = 1; has = 0
+            }
+            print
+        }
+        END { close_block(); exit(added ? 0 : 1) }
+    ' "$1"
+}
+
+# homepage_migrate_services <services.yaml>
+#
+# Homepage config is generated once at setup, so existing installs need these
+# widget fields added for current upstream versions:
+#   - Jellyfin 12 removed the /emby routes and api_key auth that Homepage's
+#     default (version 1) Jellyfin widget uses; `version: 2` switches it over.
+#   - Tdarr 3 runs with auth on, so its widget needs the API key.
+# Prints `<widget>.<field>` for each change. Returns 1 if the file is missing.
+homepage_migrate_services() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+
+    local spec typ field val tmp
+    tmp="$(mktemp)"
+    for spec in \
+        'jellyfin|version|2' \
+        'tdarr|key|{{HOMEPAGE_VAR_TDARR_API_KEY}}'; do
+        IFS='|' read -r typ field val <<< "$spec"
+        if _widget_ensure_field "$file" "$typ" "$field" "$val" > "$tmp"; then
+            cat "$tmp" > "$file"   # keep the file's inode, owner and mode
+            echo "${typ}.${field}"
+        fi
+    done
+    rm -f "$tmp"
+    return 0
+}
+
+# recyclarr_migrate_config <recyclarr.yml>
+#
+# The config is copied from config/recyclarr.yml once at configure time, so
+# existing installs keep the old template's problems:
+#   - `replace_existing_custom_formats` was removed in Recyclarr v8.
+#   - Five TRaSH custom-format IDs pointed at the wrong formats (e.g. the
+#     "AMZN" line was actually "HD Bluray Tier 01").
+# Only exact template lines (ID plus its comment) are rewritten, so the same ID
+# used on purpose elsewhere is left alone. Prints one line per change.
+# Returns 1 if the file is missing.
+recyclarr_migrate_config() {
+    local file="$1"
+    [[ -f "$file" ]] || return 1
+
+    if grep -q '^ *replace_existing_custom_formats:' "$file"; then
+        sed -i '/^ *replace_existing_custom_formats:/d' "$file"
+        echo "removed replace_existing_custom_formats"
+    fi
+
+    local entry old new comment
+    for entry in \
+        'd6819cba26b1a6508138d25fb5e32293|d660701077794679fd59e8bdf4ce3a29|# AMZN (Amazon)' \
+        '77a7b25585c18af08f60b1547bb9b4fb|f67c9ca88f463a48346062e8ad07713f|# ATVP (Apple TV+)' \
+        'a880d6abc21e7c16884f3ae393f84179|f6cce30f1733d5c8194222a7507909bb|# HULU' \
+        '3ac5d84fce98bab1b531393e9c82f467|0ac24a2a68a9700bcb7eeca8e5cd644c|# iT (iTunes)' \
+        '0f12c086e289cf966fa5948eac571f44|e9001909a4c88013a359d0b9920d7bea|# Theatrical Cut'; do
+        IFS='|' read -r old new comment <<< "$entry"
+        # Patterns contain only hex, spaces, '#', letters, '+', '(' and ')',
+        # which are literal in sed's basic regex.
+        if grep -q -- "- ${old}  ${comment}\$" "$file"; then
+            sed -i "s|- ${old}  ${comment}\$|- ${new}  ${comment}|" "$file"
+            echo "fixed trash_id for ${comment#\# }"
+        fi
+    done
+    return 0
+}
+
 # ensure_seerr_config_owner <dir>
 #
 # chown -R the Seerr config dir to SEERR_UID:SEERR_GID if anything in it is

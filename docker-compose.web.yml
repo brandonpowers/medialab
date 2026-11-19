@@ -8,7 +8,9 @@
 
 services:
   medialab-ui:
-    image: python:3.11-slim
+    # 3.14 is the last Python with `http.server --cgi` (removed in 3.15).
+    # Don't move to python:3-slim / :slim, which now resolve to 3.15+.
+    image: python:3.14-slim
     container_name: medialab-ui
     working_dir: /app
     command: >

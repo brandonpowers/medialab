@@ -31,7 +31,7 @@ jellyfin_api() {
         -s
         -X "$method"
         -H "Content-Type: application/json"
-        -H "X-Emby-Authorization: MediaBrowser Client=\"Medialab Setup\", Device=\"Setup Script\", DeviceId=\"medialab-setup\", Version=\"1.0\""
+        -H "Authorization: MediaBrowser Client=\"Medialab Setup\", Device=\"Setup Script\", DeviceId=\"medialab-setup\", Version=\"1.0\""
     )
 
     if [[ -n "$data" ]]; then
@@ -70,12 +70,14 @@ main() {
 
     print_section "Configuring Jellyfin"
 
-    # Wait for Jellyfin to be ready (basic API)
+    # Wait for Jellyfin to be ready (basic API). Jellyfin 12 answers with a
+    # placeholder page while it initialises (first start runs DB migrations), so
+    # "the port responds" isn't enough: wait for real JSON with a Version.
     report_log "info" "Waiting for Jellyfin to be ready..."
-    local max_wait=60
+    local max_wait=180
     local waited=0
 
-    while ! curl -s "${JELLYFIN_URL}/System/Info/Public" > /dev/null 2>&1; do
+    while ! curl -s "${JELLYFIN_URL}/System/Info/Public" 2>/dev/null | jq -e '.Version' > /dev/null 2>&1; do
         sleep 2
         waited=$((waited + 2))
         if [[ $waited -ge $max_wait ]]; then
@@ -116,7 +118,7 @@ main() {
         # Check if startup API is available
         local startup_response
         startup_response=$(curl -s "${JELLYFIN_URL}/Startup/User" \
-            -H "X-Emby-Authorization: MediaBrowser Client=\"Medialab\", Device=\"Setup\", DeviceId=\"setup\", Version=\"1.0\"" 2>/dev/null || echo "")
+            -H "Authorization: MediaBrowser Client=\"Medialab\", Device=\"Setup\", DeviceId=\"setup\", Version=\"1.0\"" 2>/dev/null || echo "")
 
         if echo "$startup_response" | grep -q "Name"; then
             startup_api_ready=true
@@ -235,7 +237,7 @@ main() {
         local auth_response
         auth_response=$(curl -s -X POST "${JELLYFIN_URL}/Users/AuthenticateByName" \
             -H "Content-Type: application/json" \
-            -H "X-Emby-Authorization: MediaBrowser Client=\"Medialab Setup\", Device=\"Setup Script\", DeviceId=\"medialab-setup\", Version=\"1.0\"" \
+            -H "Authorization: MediaBrowser Client=\"Medialab Setup\", Device=\"Setup Script\", DeviceId=\"medialab-setup\", Version=\"1.0\"" \
             -d "{\"Username\": \"$admin_user\", \"Pw\": \"$admin_pass\"}" 2>/dev/null)
 
         local access_token
@@ -245,12 +247,12 @@ main() {
             # Check if libraries already exist
             local existing_libs
             existing_libs=$(curl -s "${JELLYFIN_URL}/Library/VirtualFolders" \
-                -H "X-Emby-Token: $access_token" 2>/dev/null | jq -r '.[].Name' 2>/dev/null)
+                -H "Authorization: MediaBrowser Token=\"$access_token\"" 2>/dev/null | jq -r '.[].Name' 2>/dev/null)
 
             # Add Movies library
             if ! echo "$existing_libs" | grep -q "^Movies$"; then
                 curl -s -X POST "${JELLYFIN_URL}/Library/VirtualFolders?collectionType=movies&refreshLibrary=false&name=Movies" \
-                    -H "X-Emby-Token: $access_token" \
+                    -H "Authorization: MediaBrowser Token=\"$access_token\"" \
                     -H "Content-Type: application/json" \
                     -d '{"LibraryOptions": {"PathInfos": [{"Path": "/media/movies"}], "EnableRealtimeMonitor": true, "PreferredMetadataLanguage": "en", "MetadataCountryCode": "US"}}' > /dev/null 2>&1 && \
                     report_log "success" "Added Movies library" || report_log "warning" "Could not add Movies library"
@@ -259,7 +261,7 @@ main() {
             # Add TV Shows library
             if ! echo "$existing_libs" | grep -q "^TV Shows$"; then
                 curl -s -X POST "${JELLYFIN_URL}/Library/VirtualFolders?collectionType=tvshows&refreshLibrary=false&name=TV%20Shows" \
-                    -H "X-Emby-Token: $access_token" \
+                    -H "Authorization: MediaBrowser Token=\"$access_token\"" \
                     -H "Content-Type: application/json" \
                     -d '{"LibraryOptions": {"PathInfos": [{"Path": "/media/tv"}], "EnableRealtimeMonitor": true, "PreferredMetadataLanguage": "en", "MetadataCountryCode": "US"}}' > /dev/null 2>&1 && \
                     report_log "success" "Added TV Shows library" || report_log "warning" "Could not add TV Shows library"
@@ -268,7 +270,7 @@ main() {
             # Add Music library
             if ! echo "$existing_libs" | grep -q "^Music$"; then
                 curl -s -X POST "${JELLYFIN_URL}/Library/VirtualFolders?collectionType=music&refreshLibrary=false&name=Music" \
-                    -H "X-Emby-Token: $access_token" \
+                    -H "Authorization: MediaBrowser Token=\"$access_token\"" \
                     -H "Content-Type: application/json" \
                     -d '{"LibraryOptions": {"PathInfos": [{"Path": "/media/music"}], "EnableRealtimeMonitor": true, "PreferredMetadataLanguage": "en", "MetadataCountryCode": "US"}}' > /dev/null 2>&1 && \
                     report_log "success" "Added Music library" || report_log "warning" "Could not add Music library"

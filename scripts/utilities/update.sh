@@ -79,6 +79,18 @@ if [[ -f "$arm_config" ]]; then
         echo "    ARM: $key moved to the single-mount layout"
     done < <(arm_migrate_media_paths "$arm_config")
 fi
+homepage_services="$REPO_ROOT/data/homepage/config/services.yaml"
+if [[ -f "$homepage_services" ]]; then
+    while IFS= read -r change; do
+        echo "    Homepage: added widget field $change"
+    done < <(homepage_migrate_services "$homepage_services")
+fi
+recyclarr_config="$REPO_ROOT/data/recyclarr/config/recyclarr.yml"
+if [[ -f "$recyclarr_config" ]]; then
+    while IFS= read -r change; do
+        echo "    Recyclarr: $change"
+    done < <(recyclarr_migrate_config "$recyclarr_config")
+fi
 if ! ensure_seerr_config_owner "$REPO_ROOT/data/jellyseerr/config"; then
     echo "[!] Seerr needs data/jellyseerr/config owned by ${SEERR_UID}:${SEERR_GID} and this"
     echo "    run could not change it. Fix with:"

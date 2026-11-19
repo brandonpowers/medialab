@@ -30,6 +30,11 @@ Automate video transcoding to save storage space and optimize for streaming.
 
 1. **Access:** http://SERVER_IP:8265
 
+   Tdarr 3 has login turned on. Sign in as `admin` with the `TDARR_API_KEY` value from
+   `.env` as the password; Tdarr creates that user on first start when no users exist.
+   The same key is what the internal node, the configure step and the Homepage widget
+   use for the API.
+
 2. **First Time Setup:**
    - Complete welcome wizard
    - Accept defaults for most options

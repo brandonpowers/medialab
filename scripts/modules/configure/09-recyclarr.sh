@@ -55,6 +55,13 @@ main() {
             report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
             return 0
         fi
+    else
+        # Existing copy from an older template: drop keys Recyclarr v8 removed
+        # and correct mislabelled TRaSH IDs (exact template lines only).
+        local change
+        while IFS= read -r change; do
+            report_log "success" "recyclarr.yml: $change"
+        done < <(recyclarr_migrate_config "${config_dir}/recyclarr.yml")
     fi
 
     # Fix ownership if running as root
@@ -75,6 +82,13 @@ main() {
             report_log "warning" "Recyclarr sync failed - you may need to run it manually later"
             print_info "Run: docker compose run --rm recyclarr sync"
         fi
+
+        # The long-running container's daily sync reads the API keys from its
+        # environment. It was created before configure wrote them to .env, so
+        # recreate it now (compose only recreates it if its config changed).
+        docker compose up -d recyclarr > /dev/null 2>&1 && \
+            report_log "success" "Recyclarr scheduled sync has API keys" || \
+            report_log "warning" "Could not recreate recyclarr - run: docker compose up -d recyclarr"
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

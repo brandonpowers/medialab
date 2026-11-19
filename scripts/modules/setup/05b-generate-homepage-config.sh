@@ -45,7 +45,7 @@ main() {
     cat > "$config_dir/settings.yaml" <<'EOF'
 ---
 title: Medialab Dashboard
-favicon: https://gethomepage.dev/img/favicon.ico
+favicon: https://gethomepage.dev/assets/favicon.ico
 theme: dark
 color: slate
 layout:
@@ -77,17 +77,18 @@ EOF
         description: Media Server
         widget:
           type: jellyfin
+          version: 2  # required for Jellyfin 12+ (legacy /emby routes and api_key auth removed)
           url: http://jellyfin:8096
           key: {{HOMEPAGE_VAR_JELLYFIN_API_KEY}}
           enableBlocks: true
           enableNowPlaying: true
 
-    - Jellyseerr:
-        icon: jellyseerr.svg
+    - Seerr:
+        icon: seerr.svg
         href: http://${server_ip}:5055
         description: Media Requests
         widget:
-          type: jellyseerr
+          type: seerr
           url: http://jellyseerr:5055
           key: {{HOMEPAGE_VAR_JELLYSEERR_API_KEY}}
 
@@ -179,6 +180,7 @@ EOF
         widget:
           type: tdarr
           url: http://tdarr:8265
+          key: {{HOMEPAGE_VAR_TDARR_API_KEY}}  # Tdarr 3 has auth on
 
 - Downloads:
     - qBittorrent:

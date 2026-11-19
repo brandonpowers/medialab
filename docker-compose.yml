@@ -98,6 +98,7 @@ services:
       HOMEPAGE_VAR_PROWLARR_API_KEY: ${PROWLARR_API_KEY:-}
       HOMEPAGE_VAR_BAZARR_API_KEY: ${BAZARR_API_KEY:-}
       HOMEPAGE_VAR_SABNZBD_API_KEY: ${SABNZBD_API_KEY:-}
+      HOMEPAGE_VAR_TDARR_API_KEY: ${TDARR_API_KEY:-}
       HOMEPAGE_VAR_QBIT_USER: ${QBIT_USER:-admin}
       HOMEPAGE_VAR_QBIT_PASS: ${QBIT_PASS:-}
     volumes:
@@ -298,7 +299,10 @@ services:
     logging: *default-logging
 
   recyclarr:
-    image: ghcr.io/recyclarr/recyclarr:latest
+    # Recyclarr stopped publishing `latest` in 8.4.0; track the major version.
+    # v9 changes the container's command handling (`run recyclarr sync` stops
+    # working), so moving to :9 needs 09-recyclarr.sh updated too.
+    image: ghcr.io/recyclarr/recyclarr:8
     container_name: recyclarr
     dns: *default-dns
     dns_opt: *default-dns-opt
@@ -306,6 +310,10 @@ services:
     user: ${PUID}:${PGID}
     environment:
       TZ: ${TZ}
+      # recyclarr.yml reads these via !env_var; the container's daily sync
+      # fails without them.
+      SONARR_API_KEY: ${SONARR_API_KEY:-}
+      RADARR_API_KEY: ${RADARR_API_KEY:-}
     volumes:
       - ./data/recyclarr/config:/config
     <<: *default-security
@@ -382,7 +390,7 @@ services:
       nodeName: MediaLabNode
       # Authentication - seededApiKey pre-creates an API key for automated deployments
       # Note: First user must still be created via web UI, but API access works with this key
-      serverAuth: "true"
+      auth: "true"  # Tdarr 3 reads `auth` (serverAuth was never a Tdarr variable)
       seededApiKey: ${TDARR_API_KEY:-}
       # Internal node uses same API key to connect to server
       apiKey: ${TDARR_API_KEY:-}

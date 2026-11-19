@@ -121,8 +121,16 @@ EOF
     # Trigger sync to push indexers to all linked apps
     print_info "Triggering Prowlarr sync..."
     sleep 2
-    api_post "${PROWLARR_URL}/api/v1/applicationsindexersync" "" "$prowlarr_key" > /dev/null 2>&1 && \
-        report_log "success" "Indexers synced to all apps" || report_log "warning" "Sync may need to be triggered manually"
+    # Queue Prowlarr's ApplicationIndexerSync command. (There is no
+    # /applicationsindexersync endpoint; api_post doesn't fail on HTTP errors,
+    # so confirm the command was actually accepted.)
+    local sync_resp
+    sync_resp=$(api_post "${PROWLARR_URL}/api/v1/command" '{"name":"ApplicationIndexerSync"}' "$prowlarr_key" 2>/dev/null || true)
+    if echo "$sync_resp" | jq -e '.name == "ApplicationIndexerSync"' > /dev/null 2>&1; then
+        report_log "success" "Indexer sync to all apps queued"
+    else
+        report_log "warning" "Sync may need to be triggered manually (Prowlarr → Settings → Apps → Sync App Indexers)"
+    fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
     finish_progress "complete" "$MODULE_NAME"

@@ -343,11 +343,12 @@ EOF
         report_log "warning" "Could not configure node workers"
 
     report_log "success" "Tdarr fully configured with H.265 ${gpu_name} flow and GPU workers"
+    # Tdarr 3 runs with auth on. On a server with no users, seededApiKey also
+    # creates an `admin` user whose password is that key.
     if [[ -n "$tdarr_api_key" ]]; then
-        report_log "info" "Auth enabled - create admin user at ${TDARR_URL}"
-        report_log "info" "API key for integrations: $tdarr_api_key"
+        report_log "info" "Tdarr auth is on - log in at ${TDARR_URL} as 'admin' with TDARR_API_KEY from .env as the password"
     else
-        report_log "info" "To enable auth: visit ${TDARR_URL} and create an admin account"
+        report_log "warning" "TDARR_API_KEY is not set but Tdarr 3 requires auth - set it in .env and recreate tdarr"
     fi
 
     report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"

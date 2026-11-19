@@ -12,7 +12,6 @@ sonarr:
     delete_old_custom_formats: true
 
     # Replace existing custom formats (recommended)
-    replace_existing_custom_formats: true
 
     quality_definition:
       type: series
@@ -44,13 +43,13 @@ sonarr:
     custom_formats:
       # Streaming Services (positive scores)
       - trash_ids:
-          - d6819cba26b1a6508138d25fb5e32293  # AMZN (Amazon)
-          - 77a7b25585c18af08f60b1547bb9b4fb  # ATVP (Apple TV+)
+          - d660701077794679fd59e8bdf4ce3a29  # AMZN (Amazon)
+          - f67c9ca88f463a48346062e8ad07713f  # ATVP (Apple TV+)
           - 36b72f59f4ea20aad9316f475f2d9fbb  # DCU (DC Universe)
           - 89358767a60cc28783cdc3d0be9388a4  # DSNP (Disney+)
           - 7a235133c87f7da4c8cccceca7e3c7a6  # HBO (HBO Max)
-          - a880d6abc21e7c16884f3ae393f84179  # HULU
-          - 3ac5d84fce98bab1b531393e9c82f467  # iT (iTunes)
+          - f6cce30f1733d5c8194222a7507909bb  # HULU
+          - 0ac24a2a68a9700bcb7eeca8e5cd644c  # iT (iTunes)
           - d34870697c9db575f17700212167be23  # NF (Netflix)
           - 1656adc6d7bb2c8cca6acfb6592db421  # PCOK (Peacock)
         assign_scores_to:
@@ -72,7 +71,6 @@ radarr:
     api_key: !env_var RADARR_API_KEY
 
     delete_old_custom_formats: true
-    replace_existing_custom_formats: true
 
     quality_definition:
       type: movie
@@ -106,7 +104,7 @@ radarr:
       - trash_ids:
           - 9f6cbff8cfe4ebbc1bde14c7b7bec0de  # IMAX Enhanced
           - 09d9dd29a0fc958f9796e65c2a8864b4  # Open Matte
-          - 0f12c086e289cf966fa5948eac571f44  # Theatrical Cut
+          - e9001909a4c88013a359d0b9920d7bea  # Theatrical Cut
           - 570bc9ebecd92723d2d21500f4be314c  # Remaster
         assign_scores_to:
           - name: HD-1080p

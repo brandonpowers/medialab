@@ -73,7 +73,7 @@ main() {
         local auth_resp
         auth_resp=$(curl -s -X POST "${JELLYFIN_URL}/Users/AuthenticateByName" \
             -H "Content-Type: application/json" \
-            -H "X-Emby-Authorization: MediaBrowser Client=\"Jellyseerr\", Device=\"Setup\", DeviceId=\"jellyseerr-setup\", Version=\"1.0\"" \
+            -H "Authorization: MediaBrowser Client=\"Jellyseerr\", Device=\"Setup\", DeviceId=\"jellyseerr-setup\", Version=\"1.0\"" \
             -d "{\"Username\": \"$admin_user\", \"Pw\": \"$admin_pass\"}" 2>/dev/null)
 
         local jellyfin_token jellyfin_user_id jellyfin_username
@@ -90,13 +90,13 @@ main() {
 
         # Get Jellyfin server info
         local server_info server_id server_name
-        server_info=$(curl -s "${JELLYFIN_URL}/System/Info" -H "X-Emby-Token: $jellyfin_token")
+        server_info=$(curl -s "${JELLYFIN_URL}/System/Info" -H "Authorization: MediaBrowser Token=\"$jellyfin_token\"")
         server_id=$(echo "$server_info" | jq -r '.Id')
         server_name=$(echo "$server_info" | jq -r '.ServerName')
 
         # Get Jellyfin libraries (only Movies and TV Shows, with proper type field)
         local libraries
-        libraries=$(curl -s "${JELLYFIN_URL}/Library/VirtualFolders" -H "X-Emby-Token: $jellyfin_token" | \
+        libraries=$(curl -s "${JELLYFIN_URL}/Library/VirtualFolders" -H "Authorization: MediaBrowser Token=\"$jellyfin_token\"" | \
             jq '[.[] | select(.CollectionType == "movies" or .CollectionType == "tvshows") | {
                 id: .ItemId,
                 name: .Name,

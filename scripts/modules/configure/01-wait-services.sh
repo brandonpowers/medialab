@@ -40,7 +40,7 @@ sync_jellyfin_widget_key() {
     if [[ -n "$current_key" ]]; then
         local http
         http=$(curl -s -o /dev/null -w '%{http_code}' \
-            -H "X-Emby-Token: $current_key" \
+            -H "Authorization: MediaBrowser Token=\"$current_key\"" \
             "${JELLYFIN_URL}/System/Info" || echo "000")
         if [[ "$http" == "200" ]]; then
             return 0
@@ -77,7 +77,7 @@ PYEOF
     local waited=0
     while (( waited < 30 )); do
         if curl -s -o /dev/null -w '%{http_code}' \
-            -H "X-Emby-Token: $new_token" \
+            -H "Authorization: MediaBrowser Token=\"$new_token\"" \
             "${JELLYFIN_URL}/System/Info" | grep -q '^200$'; then
             set_env_value "JELLYFIN_API_KEY" "$new_token" "true" "$project_root/.env"
             export JELLYFIN_API_KEY="$new_token"
