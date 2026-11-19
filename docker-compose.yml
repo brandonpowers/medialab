@@ -434,8 +434,8 @@ services:
       - ./data/arm/home:/home/arm  # Mount entire home dir to control permissions
       - ./data/arm/config:/etc/arm/config
       - ./scripts/utilities/arm-wrapper.sh:/opt/arm/scripts/docker/docker_arm_wrapper.sh  # Custom wrapper with gosu privilege dropping
-      - ./scripts/patches/arm/config.py:/opt/arm/arm/models/config.py:ro  # Patch: add missing MAX_CONCURRENT_* columns
-      - ./scripts/patches/arm/update_key.sh:/opt/arm/scripts/update_key.sh:ro  # Patch: retry MakeMKV key fetch + fall back to existing key instead of aborting the rip
+      - ./scripts/patches/arm/config.py:/opt/arm/arm/models/config.py  # Patch: add missing MAX_CONCURRENT_* columns (NOT :ro — ARM's init chowns this file on startup; :ro makes that fail and crash-loops the container)
+      - ./scripts/patches/arm/update_key.sh:/opt/arm/scripts/update_key.sh  # Patch: retry MakeMKV key fetch + fall back to existing key instead of aborting the rip (NOT :ro — see above)
       # Output + working dirs. raw/transcode live under /home/arm/movies/arm (= ${MEDIA_ROOT}/arm;
       # 11-arm.sh points RAW_PATH/TRANSCODE_PATH there) so the post-rip move is a same-mount
       # rename, not a cross-mount copy. A separate ${MEDIA_ROOT}/arm:/home/arm/media mount
