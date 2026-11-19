@@ -40,6 +40,7 @@ docker compose run --rm recyclarr sync                # sync TRaSH quality profi
 ./scripts/utilities/backup.sh [dest]                  # snapshot ./data + .env + compose (NOT media)
 ./scripts/utilities/restore.sh <backup.tar.gz>        # restore (stop the stack first)
 ./scripts/utilities/health-check.sh
+./scripts/utilities/rip-monitor.sh                    # live one-line-per-event ARM rip/drive/disk watcher
 ./scripts/utilities/validate-env.sh
 sudo ./scripts/systemd/install-timers.sh              # install auto-update + cleanup timers
 ```

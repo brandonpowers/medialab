@@ -155,6 +155,8 @@ Automatically rip Blu-ray and DVD discs when inserted.
 2. **Configuration:**
    The `./scripts/medialab configure` command sets these automatically:
    - `COMPLETED_PATH`: `/home/arm/movies/` (outputs to Jellyfin movies folder)
+   - `RAW_PATH` / `TRANSCODE_PATH`: `/home/arm/movies/arm/{raw,transcode}/` (same mount as
+     the library, so moving a finished rip is a rename rather than a full copy)
    - `SKIP_TRANSCODE`: true (Tdarr handles transcoding)
    - `DELRAWFILES`: false (preserves files on failure)
    - `MKV_ARGS`: `--minlength=600 -r` (retry on read errors)
@@ -191,6 +193,14 @@ If automatic detection doesn't work:
 1. Open ARM web UI: http://SERVER_IP:8090
 2. Click "Scan for Disc"
 3. Monitor progress in the UI
+
+### Watching a Rip from the Terminal
+
+`./scripts/utilities/rip-monitor.sh` follows ARM's job logs and prints one line per
+event that needs attention: a new job, rip milestones and errors, MakeMKV key fetch
+problems, disc read-error counts (throttled, so a scratched disc doesn't flood the
+output), low free space on `MEDIA_ROOT`, and the optical drive disappearing. Paths come
+from `.env`; set `DISK_WARN_GB` (default 80) to change the free-space threshold.
 
 ### Troubleshooting ARM
 
