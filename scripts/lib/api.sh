@@ -436,13 +436,17 @@ qbittorrent_login() {
     local cookie_file
     cookie_file=$(mktemp)
 
-    local response
-    response=$(curl -s --max-time 10 -c "$cookie_file" \
+    # qBittorrent 5.x answers a good login with 204 and an empty body (4.x: 200
+    # "Ok.") and a bad one with 401 (4.x: 200 "Fails."), so judge by status plus
+    # the session cookie (SID, or QBT_SID_<port> in 5.x). Credentials are
+    # URL-encoded: a raw "&" or "+" in a password would corrupt the form.
+    local code
+    code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -c "$cookie_file" \
         --header "Referer: ${QBITTORRENT_URL}" \
-        --data "username=${username}&password=${password}" \
-        "${QBITTORRENT_URL}/api/v2/auth/login" 2>/dev/null || echo "FAILED")
+        --data-urlencode "username=${username}" --data-urlencode "password=${password}" \
+        "${QBITTORRENT_URL}/api/v2/auth/login" 2>/dev/null) || code="000"
 
-    if [[ "$response" == "Ok." ]]; then
+    if [[ "$code" == 2* ]] && grep -qE $'\t(QBT_)?SID(_[0-9]+)?\t' "$cookie_file"; then
         echo "$cookie_file"
     else
         rm -f "$cookie_file"
@@ -450,18 +454,21 @@ qbittorrent_login() {
     fi
 }
 
-# Make qBittorrent API request with session cookie
-# Usage: qbittorrent_api <cookie_file> <endpoint> [post_data]
+# Make qBittorrent API request with session cookie. With no fields it is a GET;
+# each name=value field is POSTed URL-encoded (qBittorrent 5.x requires POST for
+# anything that changes state). Fails on HTTP >= 400, e.g. 409 for an existing
+# category.
+# Usage: qbittorrent_api <cookie_file> <endpoint> [name=value ...]
 qbittorrent_api() {
     local cookie_file="$1"
     local endpoint="$2"
-    local post_data="${3:-}"
+    shift 2
 
-    local args=(-s --max-time 10 -b "$cookie_file" --header "Referer: ${QBITTORRENT_URL}")
-
-    if [[ -n "$post_data" ]]; then
-        args+=(--data "$post_data")
-    fi
+    local args=(-s --fail --max-time 10 -b "$cookie_file" --header "Referer: ${QBITTORRENT_URL}")
+    local field
+    for field in "$@"; do
+        args+=(--data-urlencode "$field")
+    done
 
     curl "${args[@]}" "${QBITTORRENT_URL}/api/v2/${endpoint}"
 }

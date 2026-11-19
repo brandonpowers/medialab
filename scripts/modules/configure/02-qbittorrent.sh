@@ -95,27 +95,38 @@ main() {
             # Stop qBittorrent
             docker compose stop qbittorrent > /dev/null 2>&1 || true
 
-            # Remove password line from config (forces temp password generation)
-            sed -i '/WebUI\\Password_PBKDF2/d' "$config_file"
+            # Remove the stored credentials so qBittorrent starts with user
+            # "admin" and logs a temporary password. 5.x keeps them under
+            # [WebUI] as Password_PBKDF2=/Username=; 4.x under [Preferences]
+            # as WebUI\Password_PBKDF2=/WebUI\Username=. The block below then
+            # renames the user to the admin account.
+            sed -i -E '/^(WebUI\\)?(Password_PBKDF2|Username)=/d' "$config_file"
 
-            # Also set the username to admin user
-            if grep -q "WebUI\\\\Username=" "$config_file"; then
-                sed -i "s/WebUI\\\\Username=.*/WebUI\\\\Username=$admin_user/" "$config_file"
-            fi
-
-            # Restart qBittorrent
+            # Restart, then read the temp password from this start's logs only:
+            # `up -d` reuses the container, whose log still holds the previous
+            # session's (now invalid) password.
+            local since
+            since=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             docker compose up -d qbittorrent > /dev/null 2>&1 || true
-            sleep 5
 
-            # Get new temp password
-            local temp_pass
-            temp_pass=$(docker compose logs qbittorrent 2>/dev/null | grep -oP 'temporary password is provided for this session: \K\S+' | tail -1 || true)
+            local temp_pass="" tries=0
+            while [[ -z "$temp_pass" && $tries -lt 15 ]]; do
+                sleep 2
+                tries=$((tries + 1))
+                temp_pass=$(docker compose logs --since "$since" qbittorrent 2>/dev/null | grep -oP 'temporary password is provided for this session: \K\S+' | tail -1 || true)
+            done
+            # The password is logged during startup; wait for the WebUI to listen.
+            tries=0
+            while [[ -n "$temp_pass" && $tries -lt 15 ]] && ! curl -s -m 2 "${QBITTORRENT_URL}/api/v2/app/version" > /dev/null 2>&1; do
+                sleep 1
+                tries=$((tries + 1))
+            done
 
             if [[ -n "$temp_pass" ]]; then
                 report_log "info" "Got new temporary password, logging in..."
-                cookie_file=$(qbittorrent_login "$admin_user" "$temp_pass")
+                cookie_file=$(qbittorrent_login "admin" "$temp_pass")
                 if [[ -n "$cookie_file" ]]; then
-                    qbit_user="$admin_user"
+                    qbit_user="admin"
                     qbit_pass="$temp_pass"
                     report_log "success" "Password reset successful"
                 fi
@@ -131,7 +142,7 @@ main() {
         local admin_pass="${ADMIN_PASSWORD:-}"
         if [[ -n "$admin_pass" && ( "$qbit_pass" != "$admin_pass" || "$qbit_user" != "$admin_user" ) ]]; then
             print_info "Setting qBittorrent credentials to admin account..."
-            # URL encode for JSON
+            # JSON-escape here; qbittorrent_api URL-encodes the json= field.
             local escaped_user escaped_pass
             escaped_user=$(printf '%s' "$admin_user" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
             escaped_pass=$(printf '%s' "$admin_pass" | python3 -c 'import sys,json; print(json.dumps(sys.stdin.read()))')
@@ -160,14 +171,29 @@ main() {
             'json={"save_path":"/downloads/complete","temp_path_enabled":true,"temp_path":"/downloads/incomplete"}' \
             > /dev/null 2>&1 && report_log "success" "Download paths configured" || report_log "warning" "Failed to configure download paths"
 
-        # Create category directories for *arr apps
+        # Create category directories for *arr apps (skipping ones that exist:
+        # createCategory answers 409 for those)
         print_info "Creating download categories..."
+        local existing_categories created=() failed=()
+        existing_categories=$(qbittorrent_api "$cookie_file" "torrents/categories" 2>/dev/null || echo '{}')
         for category in tv movies music; do
-            qbittorrent_api "$cookie_file" "torrents/createCategory" \
-                "category=${category}&savePath=/downloads/complete/${category}" \
-                > /dev/null 2>&1
+            if jq -e --arg c "$category" 'has($c)' <<<"$existing_categories" > /dev/null 2>&1; then
+                continue
+            fi
+            if qbittorrent_api "$cookie_file" "torrents/createCategory" \
+                "category=${category}" "savePath=/downloads/complete/${category}" > /dev/null 2>&1; then
+                created+=("$category")
+            else
+                failed+=("$category")
+            fi
         done
-        report_log "success" "Categories created (tv, movies, music)"
+        if (( ${#failed[@]} )); then
+            report_log "warning" "Could not create categories: ${failed[*]}"
+        elif (( ${#created[@]} )); then
+            report_log "success" "Categories created (${created[*]})"
+        else
+            report_log "info" "Categories already exist (tv, movies, music)"
+        fi
 
         rm -f "$cookie_file"
 

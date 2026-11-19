@@ -53,39 +53,48 @@ main() {
 
         # Configure Forms authentication
         if [[ -n "$admin_pass" ]]; then
-            # Bazarr requires MD5 hash of the password
+            # Bazarr stores an unsalted hex MD5 of the password (still true in 1.6).
             local pass_hash
-            pass_hash=$(echo -n "$admin_pass" | md5sum | cut -d' ' -f1)
+            pass_hash=$(printf '%s' "$admin_pass" | md5sum | cut -d' ' -f1)
 
-            # Update auth section in config file
-            sed -i "s/^  type: .*/  type: form/" "$config_file"
-            sed -i "s/^  username: .*/  username: $admin_user/" "$config_file"
-            sed -i "s/^  password: .*/  password: $pass_hash/" "$config_file"
-            report_log "success" "Forms authentication configured for user: $admin_user"
+            # Scoped to the auth: section. A file-wide edit would also rewrite
+            # the username/password/type keys of ~15 providers, Plex, Postgres
+            # and the proxy (Bazarr then resets proxy.type on start).
+            if yaml_set_section_value "$config_file" auth type form raw \
+                && yaml_set_section_value "$config_file" auth username "$admin_user" \
+                && yaml_set_section_value "$config_file" auth password "$pass_hash"; then
+                report_log "success" "Forms authentication configured for user: $admin_user"
+            else
+                report_log "warning" "Could not find Bazarr's auth settings - configure login manually"
+            fi
         fi
 
         # Enable and configure Sonarr
         if [[ -n "${SONARR_API_KEY:-}" ]]; then
             print_info "Linking Sonarr to Bazarr..."
-            sed -i "s/use_sonarr: false/use_sonarr: true/" "$config_file"
-            # Update sonarr section
-            sed -i "/^sonarr:/,/^[a-z]/ {
-                s/apikey: .*/apikey: ${SONARR_API_KEY}/
-                s/ip: .*/ip: sonarr/
-            }" "$config_file"
-            report_log "success" "Sonarr linked"
+            # Quoted so a key of only digits stays a string (Bazarr's validator
+            # would otherwise reset it to empty).
+            if yaml_set_section_value "$config_file" general use_sonarr true raw \
+                && yaml_set_section_value "$config_file" sonarr apikey "${SONARR_API_KEY}" \
+                && yaml_set_section_value "$config_file" sonarr ip sonarr; then
+                report_log "success" "Sonarr linked"
+            else
+                report_log "warning" "Could not find Bazarr's Sonarr settings - link manually"
+            fi
         fi
 
         # Enable and configure Radarr
         if [[ -n "${RADARR_API_KEY:-}" ]]; then
             print_info "Linking Radarr to Bazarr..."
-            sed -i "s/use_radarr: false/use_radarr: true/" "$config_file"
-            # Update radarr section
-            sed -i "/^radarr:/,/^[a-z]/ {
-                s/apikey: .*/apikey: ${RADARR_API_KEY}/
-                s/ip: .*/ip: radarr/
-            }" "$config_file"
-            report_log "success" "Radarr linked"
+            # Quoted so a key of only digits stays a string (Bazarr's validator
+            # would otherwise reset it to empty).
+            if yaml_set_section_value "$config_file" general use_radarr true raw \
+                && yaml_set_section_value "$config_file" radarr apikey "${RADARR_API_KEY}" \
+                && yaml_set_section_value "$config_file" radarr ip radarr; then
+                report_log "success" "Radarr linked"
+            else
+                report_log "warning" "Could not find Bazarr's Radarr settings - link manually"
+            fi
         fi
 
         # Restart Bazarr

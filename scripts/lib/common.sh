@@ -187,3 +187,51 @@ check_password_strength() {
     fi
     return 0
 }
+
+# ============================================
+# CONFIG FILE EDITING
+# ============================================
+
+# Set an existing key inside one top-level section of a two-level YAML file
+# (Bazarr's config.yaml shape):
+#
+#   auth:
+#     type: null
+#     username: ''
+#
+# Only "  <key>:" lines inside "<section>:" are touched, so same-named keys in
+# other sections (Bazarr has username/password under a dozen providers) are left
+# alone. The value is written single-quoted with YAML escaping, so digits-only
+# keys stay strings and quotes, slashes and ampersands need no care; pass "raw"
+# as the 5th argument for booleans/null. The file is rewritten in place
+# (ownership and mode kept). Returns 1, leaving the file unchanged, if the file,
+# section or key is missing.
+# Usage: yaml_set_section_value <file> <section> <key> <value> [raw]
+yaml_set_section_value() {
+    local file="$1" section="$2" key="$3" value="$4" mode="${5:-quoted}"
+    [[ -f "$file" ]] || return 1
+
+    local rendered="$value"
+    if [[ "$mode" != "raw" ]]; then
+        rendered="'${value//\'/\'\'}'"
+    fi
+
+    local tmp
+    tmp=$(mktemp) || return 1
+    # Values go through ENVIRON, not awk -v, which would interpret backslashes.
+    if YSV_SECTION="$section" YSV_KEY="$key" YSV_VALUE="$rendered" awk '
+        BEGIN { sec = ENVIRON["YSV_SECTION"] ":"; k = "  " ENVIRON["YSV_KEY"] ":"; done = 0 }
+        /^[^ #-]/ { insec = ($0 == sec || index($0, sec " ") == 1) }
+        insec && !done && ($0 == k || index($0, k " ") == 1) {
+            print k " " ENVIRON["YSV_VALUE"]; done = 1; next
+        }
+        { print }
+        END { exit done ? 0 : 1 }
+    ' "$file" > "$tmp"; then
+        cat "$tmp" > "$file"
+        rm -f "$tmp"
+        return 0
+    fi
+    rm -f "$tmp"
+    return 1
+}
