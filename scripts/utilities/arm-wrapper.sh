@@ -37,7 +37,7 @@ fi
 
 # Ensure arm user owns necessary directories before ripping
 # This prevents "Permission ERROR" at startup
-for dir in /home/arm/media/raw /home/arm/media/transcode /home/arm/media/completed /home/arm/movies/unidentified; do
+for dir in /home/arm/movies/arm/raw /home/arm/movies/arm/transcode /home/arm/movies/arm/completed /home/arm/movies/unidentified; do
     if [[ -d "$dir" ]]; then
         chown "$ARM_UID:$ARM_GID" "$dir" 2>/dev/null || true
     else

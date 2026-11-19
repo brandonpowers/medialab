@@ -139,6 +139,13 @@ main() {
         report_log "success" "All directories owned by ${puid}:${pgid}"
     fi
 
+    # Seerr runs as a fixed UID and ignores PUID/PGID, so override the above.
+    if ensure_seerr_config_owner "$project_root/data/jellyseerr/config"; then
+        report_log "success" "Seerr config owned by ${SEERR_UID}:${SEERR_GID}"
+    else
+        report_log "warning" "Could not chown data/jellyseerr/config to ${SEERR_UID}:${SEERR_GID} (may need sudo)"
+    fi
+
     # ARM config file permissions for web UI write access
     if [[ -f "$project_root/data/arm/config/arm.yaml" ]]; then
         chmod 664 "$project_root/data/arm/config/arm.yaml" 2>/dev/null || true

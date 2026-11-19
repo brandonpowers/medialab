@@ -102,6 +102,12 @@ ls -la /mnt/media/movies
 
 Media request and discovery platform that integrates with Jellyfin, Sonarr, and Radarr.
 
+> **Now runs Seerr.** Jellyseerr and Overseerr merged into [Seerr](https://docs.seerr.dev/), and
+> `fallenbagel/jellyseerr` is deprecated. The stack runs `ghcr.io/seerr-team/seerr` under the
+> same `jellyseerr` service name, port (5055) and config dir. The existing database is migrated
+> automatically on first start, so `update.sh` takes a backup first. Seerr runs as UID 1000
+> regardless of `PUID`; `update.sh` and setup keep `data/jellyseerr/config` owned accordingly.
+
 ### Features
 - Beautiful media discovery interface
 - User request system

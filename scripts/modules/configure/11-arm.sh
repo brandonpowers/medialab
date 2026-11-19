@@ -40,11 +40,12 @@ main() {
 
     print_info "Updating ARM configuration..."
 
-    # Fix COMPLETED_PATH to output directly to movies folder
-    if grep -q 'COMPLETED_PATH: "/home/arm/media/completed/"' "$arm_config"; then
-        sed -i 's|COMPLETED_PATH: "/home/arm/media/completed/"|COMPLETED_PATH: "/home/arm/movies/"|' "$arm_config"
-        report_log "success" "COMPLETED_PATH updated to /home/arm/movies/"
-    fi
+    # Point raw/transcode at /home/arm/movies/arm (same mount as the library, so
+    # the post-rip move is a rename) and COMPLETED_PATH at the library root.
+    local migrated_key
+    while IFS= read -r migrated_key; do
+        report_log "success" "$migrated_key updated for the single-mount layout"
+    done < <(arm_migrate_media_paths "$arm_config")
 
     # Add TMDB API key if available
     if [[ -n "${TMDB_API_KEY:-}" ]]; then

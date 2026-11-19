@@ -132,9 +132,17 @@ services:
     <<: *default-security
     logging: *default-logging
 
+  # Seerr: the merged successor to Jellyseerr/Overseerr (fallenbagel/jellyseerr is
+  # deprecated). The service/container keep the `jellyseerr` name so the configure
+  # modules, Homepage widget, and URLs are unchanged; the API (/api/v1, port 5055) is
+  # the same. First start auto-migrates the existing DB in data/jellyseerr/config.
+  # The image runs as the fixed `node` user (UID 1000) and ignores PUID/PGID, so the
+  # config dir must be owned by 1000:1000 (05-create-directories.sh and update.sh
+  # enforce this).
   jellyseerr:
-    image: fallenbagel/jellyseerr:latest
+    image: ghcr.io/seerr-team/seerr:latest
     container_name: jellyseerr
+    init: true  # Seerr's image no longer ships its own init process
     dns: *default-dns
     dns_opt: *default-dns-opt
     restart: unless-stopped
@@ -418,9 +426,13 @@ services:
       - ./data/arm/home:/home/arm  # Mount entire home dir to control permissions
       - ./data/arm/config:/etc/arm/config
       - ./scripts/utilities/arm-wrapper.sh:/opt/arm/scripts/docker/docker_arm_wrapper.sh  # Custom wrapper with gosu privilege dropping
-      - ./data/arm/patches/config.py:/opt/arm/arm/models/config.py  # Patch: add missing MAX_CONCURRENT_* columns
-      - ${MEDIA_ROOT}/arm:/home/arm/media  # Temporary storage during ripping (on external drive)
-      - ${MEDIA_ROOT}:/home/arm/movies  # Final output (ARM adds movies/ or tv/ subfolder)
+      - ./scripts/patches/arm/config.py:/opt/arm/arm/models/config.py:ro  # Patch: add missing MAX_CONCURRENT_* columns
+      - ./scripts/patches/arm/update_key.sh:/opt/arm/scripts/update_key.sh:ro  # Patch: retry MakeMKV key fetch + fall back to existing key instead of aborting the rip
+      # Output + working dirs. raw/transcode live under /home/arm/movies/arm (= ${MEDIA_ROOT}/arm;
+      # 11-arm.sh points RAW_PATH/TRANSCODE_PATH there) so the post-rip move is a same-mount
+      # rename, not a cross-mount copy. A separate ${MEDIA_ROOT}/arm:/home/arm/media mount
+      # forced a full EXDEV copy of every rip.
+      - ${MEDIA_ROOT}:/home/arm/movies
       - /run/udev:/run/udev:ro  # udev events for automatic disc detection
     mem_limit: 4g
     cpus: "4"

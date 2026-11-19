@@ -19,6 +19,7 @@ source "$_MEDIALAB_LIB_DIR/detect.sh"
 source "$_MEDIALAB_LIB_DIR/env.sh"
 source "$_MEDIALAB_LIB_DIR/api.sh"
 source "$_MEDIALAB_LIB_DIR/docker.sh"
+source "$_MEDIALAB_LIB_DIR/migrate.sh"
 
 # Export library directory for other scripts
 export MEDIALAB_LIB_DIR="$_MEDIALAB_LIB_DIR"
