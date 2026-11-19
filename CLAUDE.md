@@ -36,7 +36,7 @@ Operations (utilities are standalone, not under the `medialab` CLI):
 docker compose pull && docker compose up -d           # update images manually
 docker compose logs -f <service>                      # logs
 docker compose run --rm recyclarr sync                # sync TRaSH quality profiles
-./scripts/utilities/update.sh                         # snapshot → pull → recreate → health-check
+./scripts/utilities/update.sh                         # pull → stop → snapshot → recreate → health-check
 ./scripts/utilities/backup.sh [dest]                  # snapshot ./data + .env + compose (NOT media)
 ./scripts/utilities/restore.sh <backup.tar.gz>        # restore (stop the stack first)
 ./scripts/utilities/health-check.sh

@@ -248,18 +248,21 @@ Snapshots contain secrets and are written with mode `600`. They are gitignored.
 
 ### Updates
 
-Use the bundled helper. It takes a configuration snapshot **before** pulling new
-images (so a bad `:latest` image can be rolled back), recreates the containers,
-and verifies service health afterward:
+Use the bundled helper. It pulls new images first (no downtime), then briefly
+stops the stack to take a consistent configuration snapshot (so a bad `:latest`
+image can be rolled back), recreates the containers, and verifies service health
+afterward. If anything fails while the stack is stopped, the existing containers
+are started again:
 
 ```bash
 git pull                            # update the repo itself (optional)
-./scripts/utilities/update.sh       # snapshot → pull → recreate → health check
+./scripts/utilities/update.sh       # pull → stop → snapshot → recreate → health check
 ```
 
-Pass `--no-backup` to skip the pre-update snapshot (not recommended). If a
-service is unhealthy after an update, restore the snapshot the script just took
-with `./scripts/utilities/restore.sh <backup>`.
+Snapshots go to `backups/`; the newest 4 are kept (set `MEDIALAB_BACKUP_KEEP`,
+`0` = keep all). Pass `--no-backup` to skip the snapshot and the stop (not
+recommended). If a service is unhealthy after an update, restore the snapshot
+the script just took with `./scripts/utilities/restore.sh <backup>`.
 
 ## Requirements
 

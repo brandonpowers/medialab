@@ -1,6 +1,7 @@
 # keep secrets & local data out of git
 .env
 .env.backup*
+.env.bak*
 data/
 
 # config snapshots from backup.sh (contain .env / secrets)

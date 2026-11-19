@@ -3,10 +3,16 @@
 # update.sh - Pull the latest service images and recreate containers.
 # Takes a configuration snapshot first so a bad image can be rolled back.
 #
+# Order: pull (no downtime) → stop → snapshot → migrate config → recreate.
+# The stack is stopped only for the snapshot so databases are captured at rest
+# (a hot copy of a live SQLite DB can be inconsistent). If anything fails while
+# it is stopped, the existing containers are started again on exit.
+#
 # Usage:
 #   ./scripts/utilities/update.sh [--no-backup]
 #
-#   --no-backup   Skip the pre-update config snapshot (not recommended).
+#   --no-backup   Skip the pre-update config snapshot and the stop it needs
+#                 (not recommended).
 #
 set -euo pipefail
 
@@ -29,23 +35,38 @@ echo "[*] Medialab Update Script"
 echo "========================="
 echo ""
 
-# Snapshot current config before changing anything, so a bad :latest image can
-# be recovered (compose pulls floating tags, so updates are not reproducible).
+# Pull first: it can take a while and needs no downtime. A failed pull exits
+# here with the stack untouched.
+echo "[1/6] Pulling latest Docker images..."
+docker compose pull
+
+# If we exit while the stack is stopped (failed backup, any error under set -e),
+# start the existing containers again rather than leaving services down.
+# `start` restarts the stopped containers as-is; it does not recreate them on
+# the newly pulled images.
+STACK_STOPPED=false
+restart_if_stopped() {
+    if $STACK_STOPPED; then
+        echo "[!] Update did not complete — starting the existing containers again..."
+        docker compose start || true
+    fi
+}
+trap restart_if_stopped EXIT
+
+# Snapshot config before changing anything, so a bad :latest image can be
+# recovered (compose pulls floating tags, so updates are not reproducible).
+echo ""
 if $DO_BACKUP; then
-    echo "[1/6] Backing up configuration before update..."
-    if "$SCRIPT_DIR/backup.sh"; then
-        echo ""
-    else
+    echo "[2/6] Stopping services and backing up configuration..."
+    STACK_STOPPED=true
+    docker compose stop
+    if ! "$SCRIPT_DIR/backup.sh"; then
         echo "[!] Backup failed — aborting update. Use --no-backup to override."
         exit 1
     fi
 else
-    echo "[1/6] Skipping pre-update backup (--no-backup)."
-    echo ""
+    echo "[2/6] Skipping pre-update backup (--no-backup)."
 fi
-
-echo "[2/6] Pulling latest Docker images..."
-docker compose pull
 
 # Bring on-disk config in line with the current docker-compose.yml before the
 # containers are recreated against it. Each step is idempotent (a no-op once
@@ -67,6 +88,7 @@ fi
 echo ""
 echo "[4/6] Recreating containers with new images..."
 docker compose up -d
+STACK_STOPPED=false
 
 echo ""
 echo "[5/6] Cleaning up old images..."
