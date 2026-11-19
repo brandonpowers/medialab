@@ -378,6 +378,9 @@ services:
     dns: *default-dns
     dns_opt: *default-dns-opt
     restart: unless-stopped
+    # Tdarr doesn't exit within compose's default 10s and gets SIGKILLed
+    # mid-write; give it time to shut down cleanly.
+    stop_grace_period: 30s
     ports:
       - "8265:8265"  # Web UI
       - "8266:8266"  # Server port
@@ -388,9 +391,11 @@ services:
       webUIPort: 8265
       internalNode: "true"
       nodeName: MediaLabNode
-      # Authentication - seededApiKey pre-creates an API key for automated deployments
-      # Note: First user must still be created via web UI, but API access works with this key
-      auth: "true"  # Tdarr 3 reads `auth` (serverAuth was never a Tdarr variable)
+      # Authentication. Tdarr 3 reads `auth`; an upgraded 2.x server keeps the
+      # `auth: false` saved in configs/Tdarr_Server_Config.json unless this is set.
+      # seededApiKey creates this API key on start and, if no users exist yet, an
+      # `admin` user whose password is the key.
+      auth: "true"
       seededApiKey: ${TDARR_API_KEY:-}
       # Internal node uses same API key to connect to server
       apiKey: ${TDARR_API_KEY:-}

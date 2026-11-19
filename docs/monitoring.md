@@ -33,7 +33,10 @@ Automate video transcoding to save storage space and optimize for streaming.
    Tdarr 3 has login turned on. Sign in as `admin` with the `TDARR_API_KEY` value from
    `.env` as the password; Tdarr creates that user on first start when no users exist.
    The same key is what the internal node, the configure step and the Homepage widget
-   use for the API.
+   use for the API. If you created Tdarr users before upgrading from 2.x, no `admin` user
+   is added: sign in with one of those. Worker limits set by the configure step (2 GPU
+   transcode + 1 GPU health check, or one CPU worker of each on a host without a GPU) are only a
+   starting point; changes made in the web UI persist.
 
 2. **First Time Setup:**
    - Complete welcome wizard

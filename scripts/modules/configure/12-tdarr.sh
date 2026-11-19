@@ -74,23 +74,34 @@ main() {
         tdarr_curl_auth=(-H "x-api-key: ${tdarr_api_key}")
     fi
 
-    # Helper function to make Tdarr API calls with optional auth
+    # Helper function to make Tdarr API calls with optional auth.
+    # Prints the response body and returns non-zero on a transport error or a
+    # non-2xx status, so a 401 (wrong/missing key) is no longer reported as
+    # success. Tdarr answers a successful cruddb insert/update with an empty 200.
     tdarr_api() {
         local method="$1"
         local endpoint="$2"
         local data="${3:-}"
+        local -a args=(-s -X "$method" "${TDARR_URL}${endpoint}"
+            -H "Content-Type: application/json" "${tdarr_curl_auth[@]}"
+            -w $'\n%{http_code}')
+        [[ -n "$data" ]] && args+=(-d "$data")
 
-        if [[ -n "$data" ]]; then
-            curl -s -X "$method" "${TDARR_URL}${endpoint}" \
-                -H "Content-Type: application/json" \
-                "${tdarr_curl_auth[@]}" \
-                -d "$data" 2>/dev/null || echo "{}"
-        else
-            curl -s -X "$method" "${TDARR_URL}${endpoint}" \
-                -H "Content-Type: application/json" \
-                "${tdarr_curl_auth[@]}" 2>/dev/null || echo "{}"
-        fi
+        local out code
+        out=$(curl "${args[@]}" 2>/dev/null) || { echo "{}"; return 1; }
+        code="${out##*$'\n'}"
+        out="${out%$'\n'*}"
+        echo "$out"
+        [[ "$code" == 2?? ]]
     }
+
+    # Tdarr 3 runs with auth on: stop here, rather than report a string of
+    # false successes, if the server rejects the key.
+    if ! tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}' > /dev/null; then
+        report_log "error" "Tdarr rejected the API request - check TDARR_API_KEY in .env matches the running tdarr container (recreate it after changing the key)"
+        report_progress "$MODULE_STEP" "$MODULE_TOTAL" "$MODULE_NAME" "complete"
+        return 0
+    fi
 
     # Get API keys for notifications
     local sonarr_key="${SONARR_API_KEY:-$(get_api_key sonarr)}"
@@ -105,7 +116,7 @@ main() {
 
     # Check existing flows
     local existing_flows
-    existing_flows=$(tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}')
+    existing_flows=$(tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}') || true
 
     local flow_name="h265-${gpu_type}-transcode"
     local flow_id=""
@@ -167,12 +178,12 @@ except: pass
 }
 EOF
 )
-        tdarr_api POST "/api/v2/cruddb" "$flow_body" > /dev/null 2>&1
+        tdarr_api POST "/api/v2/cruddb" "$flow_body" > /dev/null 2>&1 || true  # verified below
 
         # Verify the flow was actually created by querying again
         sleep 1
         local verify_flows
-        verify_flows=$(tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}')
+        verify_flows=$(tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"FlowsJSONDB","mode":"getAll"}}') || true
 
         if echo "$verify_flows" | grep -qE "\"name\":[[:space:]]*\"${flow_name}\""; then
             # Get the actual flow ID that was created
@@ -196,7 +207,7 @@ except: pass
 
     # Create libraries
     local existing_libraries
-    existing_libraries=$(tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"LibrarySettingsJSONDB","mode":"getAll"}}')
+    existing_libraries=$(tdarr_api POST "/api/v2/cruddb" '{"data": {"collection":"LibrarySettingsJSONDB","mode":"getAll"}}') || true
 
     local tdarr_schedule
     tdarr_schedule=$(generate_tdarr_schedule)
@@ -318,31 +329,48 @@ EOF
         print_info "Tdarr Unidentified library already exists"
     fi
 
-    # Configure node workers
+    # Configure node workers.
+    # A cruddb write to NodeJSONDB only changes the saved settings (keyed by
+    # node name), which the node reads when it next registers - the running
+    # node keeps its old limits until tdarr restarts. update-node changes the
+    # live node and saves the change, the same as the web UI. It takes the
+    # node's runtime ID, which changes on every registration, so look it up by
+    # name. The internal node registers ~10s after the server comes up.
     print_info "Configuring Tdarr node worker limits..."
-    sleep 3
+    local node_name="MediaLabNode"   # matches nodeName in docker-compose.yml
+    local node_id=""
+    for _ in $(seq 1 30); do
+        node_id=$(tdarr_api GET "/api/v2/get-nodes" 2>/dev/null \
+            | jq -r --arg n "$node_name" \
+                'to_entries[] | select(.value.nodeName == $n) | .key' 2>/dev/null \
+            | head -n1) || true
+        [[ -n "$node_id" ]] && break
+        sleep 2
+    done
 
-    local node_config='{
-        "data": {
-            "collection": "NodeJSONDB",
-            "mode": "update",
-            "docID": "MediaLabNode",
-            "obj": {
-                "workerLimits": {
-                    "healthcheckcpu": 0,
-                    "healthcheckgpu": 1,
-                    "transcodecpu": 0,
-                    "transcodegpu": 2
-                },
-                "nodePaused": false
-            }
-        }
-    }'
-    tdarr_api POST "/api/v2/cruddb" "$node_config" > /dev/null 2>&1 && \
-        report_log "success" "Node workers configured (2 GPU transcode, 1 GPU healthcheck)" || \
+    # Follow the detected hardware: GPU worker slots on a host without a GPU
+    # would never encode anything.
+    local worker_limits worker_summary
+    if [[ "$gpu_type" == "cpu" ]]; then
+        worker_limits='{"healthcheckcpu": 1, "healthcheckgpu": 0, "transcodecpu": 1, "transcodegpu": 0}'
+        worker_summary="1 CPU transcode, 1 CPU healthcheck"
+    else
+        worker_limits='{"healthcheckcpu": 0, "healthcheckgpu": 1, "transcodecpu": 0, "transcodegpu": 2}'
+        worker_summary="2 GPU transcode, 1 GPU healthcheck"
+    fi
+
+    local node_update
+    node_update=$(jq -nc --arg id "$node_id" --argjson limits "$worker_limits" \
+        '{data: {nodeID: $id, nodeUpdates: {workerLimits: $limits, nodePaused: false}}}')
+    if [[ -z "$node_id" ]]; then
+        report_log "warning" "Tdarr node '${node_name}' has not registered - set worker limits in the web UI"
+    elif tdarr_api POST "/api/v2/update-node" "$node_update" > /dev/null; then
+        report_log "success" "Node workers configured (${worker_summary})"
+    else
         report_log "warning" "Could not configure node workers"
+    fi
 
-    report_log "success" "Tdarr fully configured with H.265 ${gpu_name} flow and GPU workers"
+    report_log "success" "Tdarr configured with the H.265 ${gpu_name} flow"
     # Tdarr 3 runs with auth on. On a server with no users, seededApiKey also
     # creates an `admin` user whose password is that key.
     if [[ -n "$tdarr_api_key" ]]; then
