@@ -45,7 +45,7 @@ main() {
     local admin_pass="${ADMIN_PASSWORD:-}"
     if [[ -n "$admin_pass" ]]; then
         print_info "Configuring Radarr authentication..."
-        configure_arr_auth "${RADARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v3"
+        configure_arr_auth "${RADARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v3" || true
     fi
 
     # Add root folder
@@ -66,6 +66,7 @@ main() {
   "minUpgradeFormatScore": 1,
   "cutoffFormatScore": 0,
   "minFormatScore": 0,
+  "language": {"id": -2, "name": "Original"},
   "items": [
     {"quality": {"id": 0, "name": "Unknown"}, "items": [], "allowed": false},
     {"quality": {"id": 24, "name": "WORKPRINT"}, "items": [], "allowed": false},
@@ -112,6 +113,23 @@ EOF
 )
         ensure_resource "4K Preferred quality profile" \
             "${RADARR_URL}/api/v3/qualityprofile" "4K Preferred" "$profile_body" "$api_key" || true
+
+        # Repair a "4K Preferred" profile created by older installer versions
+        # without a language: Radarr 7 stores NULL and then rejects every
+        # release ("is wanted, but found English"). A profile whose language
+        # was set on purpose is left alone.
+        local broken_profile
+        broken_profile=$(api_get "${RADARR_URL}/api/v3/qualityprofile" "$api_key" 2>/dev/null \
+            | jq -c '.[] | select(.name == "4K Preferred" and .language == null)' 2>/dev/null || true)
+        if [[ -n "$broken_profile" ]]; then
+            if api_put "${RADARR_URL}/api/v3/qualityprofile/$(jq -r '.id' <<<"$broken_profile")" \
+                "$(jq -c '.language = {"id": -2, "name": "Original"}' <<<"$broken_profile")" "$api_key" 2>/dev/null \
+                | jq -e '.language.id == -2' > /dev/null 2>&1; then
+                report_log "success" "Repaired 4K Preferred profile language"
+            else
+                report_log "warning" "Could not repair 4K Preferred profile language"
+            fi
+        fi
     else
         report_log "warning" "Could not get quality schema - skipping 4K profile creation"
     fi

@@ -45,7 +45,7 @@ main() {
     local admin_pass="${ADMIN_PASSWORD:-}"
     if [[ -n "$admin_pass" ]]; then
         print_info "Configuring Sonarr authentication..."
-        configure_arr_auth "${SONARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v3"
+        configure_arr_auth "${SONARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v3" || true
     fi
 
     # Add root folder

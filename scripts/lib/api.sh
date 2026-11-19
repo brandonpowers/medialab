@@ -285,7 +285,10 @@ configure_arr_auth() {
         --arg pass "$password" \
         '. + {authenticationMethod: "forms", authenticationRequired: "enabled", username: $user, password: $pass, passwordConfirmation: $pass}')
 
-    if api_put "${url}/api/${api_version}/config/host" "$auth_body" "$api_key" > /dev/null 2>&1; then
+    # api_put doesn't fail on HTTP errors: a 2xx echoes the saved config, a 400
+    # is an array of validation errors. Check what was actually saved.
+    if api_put "${url}/api/${api_version}/config/host" "$auth_body" "$api_key" 2>/dev/null \
+        | jq -e '.authenticationMethod == "forms"' > /dev/null 2>&1; then
         report_log "success" "Authentication configured"
         return 0
     else
@@ -372,7 +375,7 @@ indexer_exists() {
     local indexers
     indexers=$(api_get "${PROWLARR_URL}/api/v1/indexer" "$api_key")
 
-    echo "$indexers" | grep -q "\"name\":\"${indexer_name}\""
+    resource_exists_by_name "$indexers" "$indexer_name"
 }
 
 # Add public indexer to Prowlarr
@@ -408,7 +411,10 @@ add_public_indexer() {
 EOF
 )
 
-    if api_post "${PROWLARR_URL}/api/v1/indexer" "$body" "$api_key" > /dev/null 2>&1; then
+    # api_post doesn't fail on HTTP errors; only a created indexer carries an id.
+    local response
+    response=$(api_post "${PROWLARR_URL}/api/v1/indexer" "$body" "$api_key" 2>/dev/null || true)
+    if [[ -n "$(json_first_id "$response")" ]]; then
         report_log "success" "$name added"
         return 0
     else

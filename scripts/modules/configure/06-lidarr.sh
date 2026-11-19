@@ -45,7 +45,7 @@ main() {
     local admin_pass="${ADMIN_PASSWORD:-}"
     if [[ -n "$admin_pass" ]]; then
         print_info "Configuring Lidarr authentication..."
-        configure_arr_auth "${LIDARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v1"
+        configure_arr_auth "${LIDARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v1" || true
     fi
 
     # Get profile IDs for root folder

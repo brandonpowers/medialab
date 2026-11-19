@@ -47,7 +47,7 @@ main() {
     local admin_pass="${ADMIN_PASSWORD:-}"
     if [[ -n "$admin_pass" ]]; then
         print_info "Configuring Prowlarr authentication..."
-        configure_arr_auth "${PROWLARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v1"
+        configure_arr_auth "${PROWLARR_URL}" "$api_key" "$admin_user" "$admin_pass" "v1" || true
     fi
 
     # Create FlareSolverr tag
@@ -83,11 +83,11 @@ EOF
     # Add public indexers
     print_info "Adding public torrent indexers..."
 
-    add_public_indexer "$api_key" "1337x" "1337x" "[${tag_id:-1}]"
-    add_public_indexer "$api_key" "EZTV" "eztv" "[]"
-    add_public_indexer "$api_key" "YTS" "yts" "[]"
-    add_public_indexer "$api_key" "LimeTorrents" "limetorrents" "[]"
-    add_public_indexer "$api_key" "The Pirate Bay" "thepiratebay" "[]"
+    add_public_indexer "$api_key" "1337x" "1337x" "[${tag_id:-1}]" || true
+    add_public_indexer "$api_key" "EZTV" "eztv" "[]" || true
+    add_public_indexer "$api_key" "YTS" "yts" "[]" || true
+    add_public_indexer "$api_key" "LimeTorrents" "limetorrents" "[]" || true
+    add_public_indexer "$api_key" "The Pirate Bay" "thepiratebay" "[]" || true
 
     # Add qBittorrent download client
     print_info "Adding qBittorrent to Prowlarr..."

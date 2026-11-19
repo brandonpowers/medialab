@@ -64,8 +64,8 @@ main() {
 }
 EOF
 )
-        api_post "${PROWLARR_URL}/api/v1/applications" "$sonarr_body" "$prowlarr_key" > /dev/null 2>&1 && \
-            report_log "success" "Sonarr linked to Prowlarr" || report_log "info" "Sonarr may already be linked"
+        ensure_resource "Sonarr link in Prowlarr" "${PROWLARR_URL}/api/v1/applications" \
+            "Sonarr" "$sonarr_body" "$prowlarr_key" || true
     fi
 
     # Link Radarr
@@ -89,8 +89,8 @@ EOF
 }
 EOF
 )
-        api_post "${PROWLARR_URL}/api/v1/applications" "$radarr_body" "$prowlarr_key" > /dev/null 2>&1 && \
-            report_log "success" "Radarr linked to Prowlarr" || report_log "info" "Radarr may already be linked"
+        ensure_resource "Radarr link in Prowlarr" "${PROWLARR_URL}/api/v1/applications" \
+            "Radarr" "$radarr_body" "$prowlarr_key" || true
     fi
 
     # Link Lidarr
@@ -114,8 +114,8 @@ EOF
 }
 EOF
 )
-        api_post "${PROWLARR_URL}/api/v1/applications" "$lidarr_body" "$prowlarr_key" > /dev/null 2>&1 && \
-            report_log "success" "Lidarr linked to Prowlarr" || report_log "info" "Lidarr may already be linked"
+        ensure_resource "Lidarr link in Prowlarr" "${PROWLARR_URL}/api/v1/applications" \
+            "Lidarr" "$lidarr_body" "$prowlarr_key" || true
     fi
 
     # Trigger sync to push indexers to all linked apps

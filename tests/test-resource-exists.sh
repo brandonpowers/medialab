@@ -25,4 +25,10 @@ resource_exists_by_name "" "qBittorrent";      assert_rc 1 $? "empty string -> n
 # A malformed (non-JSON) response must not crash; treat as not found.
 resource_exists_by_name "<html>500</html>" "qBittorrent"; assert_rc 1 $? "non-JSON -> not found, no crash"
 
+# Prowlarr pretty-prints its JSON ("name": "YTS"), which a compact-JSON grep
+# never matched; indexer_exists now relies on this helper.
+pretty=$'[\n  {\n    "id": 1,\n    "name": "YTS",\n    "implementation": "Cardigann"\n  }\n]'
+resource_exists_by_name "$pretty" "YTS";          assert_rc 0 $? "pretty-printed JSON matches"
+resource_exists_by_name "$pretty" "The Pirate Bay"; assert_rc 1 $? "pretty-printed JSON absent name"
+
 finish_tests
